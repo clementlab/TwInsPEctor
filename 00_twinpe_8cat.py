@@ -18,17 +18,13 @@ from matplotlib import colors as colors_mpl
 
 
 # TODO:
-# Add recoding mode (substitutions-only). Default mode is replacement (deletion + insertion). What about deletion-only and insertion-only modes? 
-# Only works for a single sample - may want to add multi-sample.
+# Add recoding mode (substitutions-only). Default mode is replacement (deletion + insertion). What about deletion-only and insertion-only modes?
+# Generate plots for both compound versions del/ins and ins/del (b1.1 and b1.2).
+# Make sure empty allele tables are not generated.
+# Add support to only require full ref seqs through end of spacers vs matching prefix/suffix. 
+# Add multi-sample support.
 # Does a deletion within the WT-TwinPE edited region make sense?
-# Use Compound reference index or TwinPE reference index for labeling x-axis of barcharts showing only the inserted edit?
-# Add compound reference sequence output.
-# Change figures a8/a9 to include full edited region rather than just the insertion.
-# Refine barplots.
-# Clean up code.
-# Add helper functions where needed.
-# Add docstrings where needed.
-
+# Clean up code, add helper functions and docstrings where needed.
 
 
 def main():
@@ -37,9 +33,10 @@ def main():
     os.makedirs(twinpe_8cat_results_folder, exist_ok=True)
     spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1])
     comp_ref_seq, wt_aln_seq, twin_aln_seq = build_compound_reference_alignments(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1], spacer_info, twinpe_8cat_results_folder)
-    crispresso_cmd = build_crispresso_command(args, comp_ref_seq, parent_folder, spacer_info)
+    # compound_ref_seq = build_compound_reference(args.wt_seq, args.twin_seq)
+    crispresso_cmd = build_crispresso_command(args, comp_ref_seq, parent_folder, spacer_info, twinpe_8cat_results_folder)
 
-    print("Running CRISPResso with command:", " ".join(crispresso_cmd))
+    print("Running CRISPResso with command:\n", " ".join(crispresso_cmd), "\n")
     subprocess.run(crispresso_cmd, check=True)
     print("Analyzing CRISPResso output...")
     analyze_single_crispresso_output(twinpe_8cat_results_folder, crispresso_output_folder, args, comp_ref_seq, wt_aln_seq, twin_aln_seq, spacer_info)
@@ -50,7 +47,7 @@ def main():
 def parse_args():
     parser = argparse.ArgumentParser(
         prog="04_twinpe_8cat_compound_crispresso.py",
-        description="Analyzes TwinPE editing outcomes by running CRISPResso2 on raw fastq sequencing files with alignment to a WT-TwinPE compound reference. Classifies reads into 8 categories and provides detailed visualizations.",
+        description="Analyzes Twin Prime Editing outcomes by running CRISPResso2 on raw fastq sequencing files with alignment to a WT-TwinPE compound reference. Classifies reads into 8 categories and provides detailed visualizations.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
             "Example: python 04_twinpe_8cat_compound_crispresso.py "
@@ -60,9 +57,9 @@ def parse_args():
             "----Category Definitions----\n"
             "Perfect PE: complete programmed edit without indels anywhere.\n"
             "PE Indel: complete programmed edit with indels anywhere.\n"
-            "Imperfect PE: some but not all of the programmed edit.\n"
-            "Left Flap: at least N consecutive bases starting from the beginning of the left half of the programmed edit and none of the edited right half.\n"
-            "Right Flap: at least N consecutive bases starting from the beginning of the right half of the programmed edit and none of the edited left half.\n"
+            "Left Flap: at least N consecutive programmed bases starting from the left and not from the right.\n"
+            "Right Flap: at least N consecutive programmed bases starting from the right and not from the left.\n"
+            "Imperfect PE: incomplete or incorrect programmed edit.\n"
             "Imperfect WT: some but not all of the wildtype sequence and none of the programmed edit.\n"
             "WT Indel: full wildtype sequence with indels anywhere and none of the programmed edit.\n"
             "WT: full wildtype sequence without indels anywhere and none of the programmed edit.\n"
@@ -70,16 +67,17 @@ def parse_args():
         )
     )
 
-    parser.add_argument("-r1", "--fastq_r1", type=str, required=True)
-    parser.add_argument("-r2", "--fastq_r2", type=str, required=False)
-    parser.add_argument("-w", "--wt_seq", type=str, required=True)
-    parser.add_argument("-t", "--twin_seq", type=str, required=True)
-    parser.add_argument("-g", "--peg_spacers", type=str, nargs=2, required=True)
-    parser.add_argument("-o", "--output_root", type=str, default=None)
-    parser.add_argument("-n", "--num_changes_to_check", type=int, default=2)
-    parser.add_argument("-amas", "--amplicon_min_alignment_score", type=int, default=50)
-    parser.add_argument("-f", "--plot_full_reads", action="store_true")
-    parser.add_argument("--produce_png", action="store_true")
+    parser.add_argument("-r1", "--fastq_r1", type=str, required=True, help="Path to FASTQ R1 file.")
+    parser.add_argument("-r2", "--fastq_r2", type=str, required=False, help="Path to FASTQ R2 file (optional).")
+    parser.add_argument("-w", "--wt_seq", type=str, required=True, help="Full wildtype reference amplicon sequence.")
+    parser.add_argument("-t", "--twin_seq", type=str, required=True, help="Full TwinPE reference amplicon sequence with 5' & 3' ends identical to wildtype reference amplicon.")
+    parser.add_argument("-g", "--peg_spacers", type=str, nargs=2, required=True, help="Space-separated pegRNA spacer sequences: <spacer A> <spacer B>")
+    parser.add_argument("-o", "--output_root", type=str, default=None, help="Root output folder for CRISPResso2 and TwinPE 8cat results. If not provided, a folder will be created in the current working directory based on the input fastq file names.")
+    parser.add_argument("-n", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed base edits required for read to be classified as left/right flap allele.")
+    parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=50, help="Default minimum homology score for a read to align to the compound reference amplicon")
+    parser.add_argument("-f", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
+    parser.add_argument("--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
+    parser.add_argument("--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
     # parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -169,7 +167,7 @@ def find_spacers_in_references(wt_seq, twin_seq, spacer_a, spacer_b):
 
 def build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, spacer_info, output_root):
     """
-    Requires that wt_seq and twin_seq share identical 5' and 3' anchor sequences.
+    Requires that wt_seq and twin_seq share identical 5' and 3' anchors.
     """
     spacer_a_coverage_wt = range(spacer_info['spacer_a_index_wt'], spacer_info['spacer_a_index_wt'] + len(spacer_a))
     spacer_b_coverage_wt = range(spacer_info['spacer_b_index_wt'], spacer_info['spacer_b_index_wt'] + len(spacer_b))
@@ -213,8 +211,38 @@ def build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, sp
         fout.write(f">Wildtype_reference_sequence_alignment\n{wt_aln_seq}\n")
         fout.write(f">Compound_reference_sequence\n{comp_ref_seq}\n")
         fout.write(f">TwinPE_reference_sequence_alignment\n{twin_aln_seq}\n")
+        fout.write(f">SpacerA_sequence\n{spacer_a}\n")
+        fout.write(f">SpacerB_sequence\n{spacer_b}\n")
 
     return comp_ref_seq, wt_aln_seq, twin_aln_seq
+
+# def build_compound_reference(wt_seq, twin_seq):
+    # """
+    # Requires that wt_seq and twin_seq share identical 5' and 3' anchor sequences.
+    # """
+#     prefix = ''
+#     for wt_base, twin_base in zip(wt_seq, twin_seq):
+#         if wt_base == twin_base:
+#             prefix += wt_base
+#         else:
+#             break
+#     if prefix == '':
+#         raise ValueError("Could not find matching prefix anchor between provided WT and TwinPE sequences")
+#     suffix = ''
+#     for wt_base, twin_base in zip(wt_seq[::-1], twin_seq[::-1]):
+#         if wt_base == twin_base:
+#             suffix += wt_base
+#         else:
+#             break
+#     if suffix == '':
+#         raise ValueError("Could not find matching suffix anchor between provided WT and TwinPE sequences")
+#     suffix = suffix[::-1]
+
+#     prefix_and_deletion = wt_seq[:wt_seq.find(suffix)]
+#     insertion_and_suffix = twin_seq[len(prefix):]
+#     compound_ref_seq = prefix_and_deletion + insertion_and_suffix
+
+#     return compound_ref_seq
 
 
 def resolve_output_folders(args):
@@ -249,7 +277,7 @@ def resolve_output_folders(args):
     return parent_folder, crispresso_output_folder, twinpe_8cat_results_folder
 
 
-def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info):
+def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info, output_root):
     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
         first_spacer = args.peg_spacers[0]
         second_spacer = args.peg_spacers[1][:len(args.peg_spacers[1])-spacer_info['spacer_b_num_bases_removed']]
@@ -263,19 +291,25 @@ def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info)
         "--amplicon_seq", compound_ref_seq,
         "--amplicon_name", "Compound",
         "--guide_seq", f"{first_spacer},{second_spacer}",
-        "--default_min_aln_score", "50",
         "--min_frequency_alleles_around_cut_to_plot", "0.01",
         "--write_detailed_allele_table",
         "--no_rerun",
-        # "--amplicon_min_alignment_score", "10",
         # "--debug"
     ]
     if args.fastq_r2:
         cmd.extend(["--fastq_r2", args.fastq_r2])
-    if args.amplicon_min_alignment_score:
-        cmd.extend(["--amplicon_min_alignment_score", str(args.amplicon_min_alignment_score)])
+    if args.default_min_aln_score:
+        cmd.extend(["--default_min_aln_score", str(args.default_min_aln_score)])
+    else:
+        cmd.extend(["--default_min_aln_score", "50"])
 
     cmd.extend(["--output_folder", output_folder])
+
+    with open(
+        os.path.join(output_root, "c6.crispresso2_command.txt"), "w"
+    ) as fout:
+        fout.write(" ".join(cmd) + "\n")
+
     return cmd
 
 
@@ -302,8 +336,33 @@ def analyze_single_crispresso_output(
         wt_seq=args.wt_seq,
         wt_aln_seq=wt_aln_seq,
         num_changes_to_check=args.num_changes_to_check,
+        ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
         produce_png=args.produce_png
     )
+    # CATEGORIES = ["Perfect_PE", "PE_Indel", "Left_Flap", "Right_Flap", "Imperfect_PE", "Imperfect_WT", "WT_Indel", "WT", "Uncategorized"]
+    CATEGORY_COLORS = {
+        "Perfect PE":  "#1f77b4",    # blue
+        "PE Indel": "#9467bd",       # purple
+        "Left Flap": "#ff7f0e",      # orange
+        "Right Flap": "#2ca02c",     # green
+        "Imperfect PE": "#d62728",   # red
+        "Imperfect WT": "#e377c2",   # pink
+        "WT Indel":   "#bcbd22",     # olive
+        "WT": "#8c564b",             # brown
+        "Uncategorized": "#7f7f7f"   # gray
+    }
+
+    # repetitive output
+    # summary_output_file = os.path.join(twinpe_8cat_results_folder, "Summary.txt")
+
+    # with open(summary_output_file, "w") as fout:
+    #     fout.write("Folder\tWT\tWT_indels\tLeft_flap\tRight_flap\tPerfect_PE\tImperfect_PE\tPE_indels\n")
+    #     fout.write(
+    #         crispresso_output_folder + "\t" + "\t".join(
+    #             str(results["folder_category_counts"][x])
+    #             for x in ["WT", "WT Indel", "Left Flap", "Right Flap", "Perfect PE", "Imperfect PE", "PE Indel"]
+    #         ) + "\n"
+    #     )
 
 
     setBarMatplotlibDefaults()
@@ -316,18 +375,27 @@ def analyze_single_crispresso_output(
     )
 
 
-    plot_stacked_summary_barplot(
+    plot_category_stacked_summary_barplot(
         crispresso_output_folder,
         results["folder_category_counts"], 
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
-    plot_summary_barplot(
+    # plot_stacked_summary_barplot(
+    #     results["folder_category_counts"], 
+    #     fig_root=twinpe_8cat_results_folder, 
+    #     produce_png=args.produce_png
+    # )
+
+
+    plot_category_summary_barplot(
         results["folder_category_counts"], 
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
@@ -346,7 +414,8 @@ def analyze_single_crispresso_output(
         ins_start=results["ins_start"],
         ins_end=results["ins_end"],
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
@@ -363,7 +432,8 @@ def analyze_single_crispresso_output(
         ins_start=results["ins_start"],
         ins_end=results["ins_end"],
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS 
     )
 
 
@@ -379,7 +449,8 @@ def analyze_single_crispresso_output(
         ins_start=results["ins_start"],
         ins_end=results["ins_end"],
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
@@ -394,33 +465,39 @@ def analyze_single_crispresso_output(
         ins_start=results["ins_start"],
         ins_end=results["ins_end"],
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
     plot_editing_summary(
-        results["deletion_counts"], 
-        results["insertion_counts"], 
-        results["substitution_counts"], 
-        results["edit_counts"], 
-        results["total_counts"], 
+        results["full_deletion_counts"], 
+        results["full_insertion_counts"], 
+        results["full_substitution_counts"], 
+        results["full_edit_counts"], 
+        results["full_total_counts"], 
         results["ins_start"], 
         results["ins_end"], 
+        results["del_start"],
+        results["del_end"],
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png
+        produce_png=args.produce_png, 
+        category_colors=CATEGORY_COLORS
     )
 
 
 
-    plot_nonprogrammed_edit_counts(
-        results["deletion_counts"],
-        results["insertion_counts"],
-        results["substitution_counts"],
-        ins_start=results["ins_start"],
-        ins_end=results["ins_end"],
-        fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
-    )
+    # plot_nonprogrammed_edit_counts(
+    #     results["full_deletion_counts"],
+    #     results["full_insertion_counts"],
+    #     results["full_substitution_counts"],
+    #     ins_start=results["ins_start"],
+    #     ins_end=results["ins_end"], 
+    #     del_start=results["del_start"],
+    #     del_end=results["del_end"],
+    #     fig_root=twinpe_8cat_results_folder,
+    #     produce_png=args.produce_png
+    # )
 
 
     setAlleleMatplotlibDefaults()
@@ -498,6 +575,7 @@ def classify_crispresso_output(
     wt_aln_seq=None,
     # comp_ref_name=None,
     num_changes_to_check=2,
+    ignore_extraspacer_deletions=False, 
     # num_changes_to_check=1,
     # consider_changes_outside_of_guide=False,
     produce_png=False,
@@ -519,6 +597,19 @@ def classify_crispresso_output(
     ref_names = crispresso2_info["results"].get("ref_names", [])
     if len(ref_names) != 1 or ref_names[0] != "Compound":
         sys.exit(f"CRISPResso2 was not run against the 'Compound' reference only - did CRISPResso2 run complete successfully?\nFound reference: {ref_names}")
+
+    # print(f"Processing {crispresso_output_folder}...")
+    # crispresso2_info = CRISPRessoShared.load_crispresso_info(crispresso_output_folder)
+
+    # redundant checks
+    # if "Compound" not in crispresso2_info['results']['refs']:
+    #     raise Exception("Reference sequence for reference 'Compound' not found - did CRISPResso2 run complete successfully?")
+
+    # if not twin_seq:
+    #     raise Exception('TwinPE reference sequence not found - was a reference sequence provided using -t or --twin_seq?')
+
+    # if not wt_seq:
+    #     raise Exception("WT reference sequence not found - was a reference sequence provided using -w or --wildtype_seq?")
 
     output_root = twinpe_8cat_results_folder
     ref = crispresso2_info["results"]["refs"]["Compound"]
@@ -637,11 +728,22 @@ def classify_crispresso_output(
     allele_counts = {} # e.g. TTRTT > 100
     allele_categories = {} # e.g. TTRTT > Left_flap
 
+    # Only plot ins region
     edit_counts = [0] * ins_region_len
     deletion_counts = [0] * ins_region_len
     insertion_counts = [0] * ins_region_len
     substitution_counts = [0] * ins_region_len
     perfect_T_count = 0
+    # Plot full ins del region
+    full_edit_counts = [0] * len(bp_changes_arr)
+    full_deletion_counts = [0] * len(bp_changes_arr)
+    full_insertion_counts = [0] * len(bp_changes_arr)
+    full_substitution_counts = [0] * len(bp_changes_arr)
+    full_edit_counts_with_indels = [0] * len(bp_changes_arr)
+    full_edit_counts_no_indels = [0] * len(bp_changes_arr)
+    full_perfect_T_count = 0
+
+    
 
     total_alleles = 0
     total_alleles_reads = 0
@@ -719,27 +821,64 @@ def classify_crispresso_output(
         has_indel_in_match_arr = any(m in ["I", "D"] for m in match_arr)
         if has_indel_in_match_arr:
             has_indel_in_match_arr_count += 1
-        # check allele table for indels anywhere
-        # check crispresso insertion list first
-        has_any_indel_byproduct = False
+
+        #### Old indel checking flag
+        # # Check ingores deletions beyond spacers - solves issue when Fastq file contains truncated reads (i.e. WT reads being misclassified as WT_Indel due to interpreted deletion at end of read)
+        # if intraspacers_only:
+        #     has_indel_in_spacer_window = False
+        #     if allele.all_insertion_left_positions != "[]":
+        #         all_ins_pos = [int(x) for x in allele.all_insertion_left_positions.strip("[]").split(",") if x.strip().isdigit()]
+        #         for ins_ind in all_ins_pos:
+        #             if ins_ind >= pegRNA_intervals[0][0]-1 and ins_ind < pegRNA_intervals[1][1]:  # pos-1 (window start) and < (window end) due to left pos being stored in allele table insertion list. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
+        #                 has_indel_in_spacer_window = True
+        #                 break
+        #     else:
+        #         edit_range = range(del_start, ins_end + 1)
+        #         all_del_pos = [int(x) for x in allele.all_deletion_positions.strip("[]").split(",") if x.strip().isdigit()]
+        #         for del_ind in all_del_pos:
+        #             if del_ind >= pegRNA_intervals[0][0] and del_ind <= pegRNA_intervals[1][1] and del_ind not in edit_range:  # allele table stores exact position of '-' for deletions. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
+        #                 has_indel_in_spacer_window = True
+        #                 break
+        #     has_indel = has_indel_in_spacer_window
+        
+        # Updated Indel checking to include flag 
+        has_any_ins_byproduct = False
+        has_del_in_spacer_window = False
+        has_any_del_byproduct = False
+        # Check for insertions anywhere in read
         if allele.all_insertion_left_positions != "[]":
-            has_any_indel_byproduct = True
-        #### check crispresso deletion list if needed - if deletion idx is not within programmed indel region - map del_ind to comp_ref idx?
+            has_any_ins_byproduct = True
         else:
             edit_range = range(del_start, ins_end + 1)
-            # caused crash
-            # all_del_pos = [int(x) for x in allele.all_deletion_positions.strip("[]").split(",")]
             all_del_pos = [int(x) for x in allele.all_deletion_positions.strip("[]").split(",") if x.strip().isdigit()]
-            for del_ind in all_del_pos:
-                if del_ind not in edit_range:
-                    has_any_indel_byproduct = True
-                    break
+            # Ignore deletions beyond spacers if flagged (spacer_info['spacer_a_num_bases_removed'])
+            if ignore_extraspacer_deletions:
+                for del_ind in all_del_pos:
+                    if del_ind >= pegRNA_intervals[0][0] and del_ind <= pegRNA_intervals[1][1] and del_ind not in edit_range:  # allele table stores exact position of '-' for deletions. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
+                        has_del_in_spacer_window = True
+                        break
+            # Check for deletions anywhere outside of the edit region if not flagged (del_ind to comp_ref index mapping not necessary)
+            else:
+                for del_ind in all_del_pos:
+                    if del_ind not in edit_range:
+                        has_any_del_byproduct = True
+                        break
+
+        # Set has_indel based on flag
+        has_any_indel_byproduct = False
+        if ignore_extraspacer_deletions:
+            if has_any_ins_byproduct or has_del_in_spacer_window:
+                has_any_indel_byproduct = True
+        else:
+            if has_any_ins_byproduct or has_any_del_byproduct:
+                has_any_indel_byproduct = True
+
         if has_any_indel_byproduct:
             has_any_indel_byproduct_count += 1
+        has_indel = has_any_indel_byproduct
         
         # has_indel = False
         # if has_any_indel_byproduct or has_indel_in_match_arr:
-        has_indel = has_any_indel_byproduct
         if has_indel:
             total_alleles_deletions_reads += allele['#Reads']
 
@@ -750,10 +889,16 @@ def classify_crispresso_output(
 
         total_TE_count = match_arr.count("T")
         has_all_TE = (total_TE_count == len(match_arr))
-        has_any_TE = (total_TE_count > 0)
+
+        # Changed to require at least num_changes_to_check
+        # has_any_TE = (total_TE_count > 0)
+        has_any_TE = (total_TE_count >= num_changes_to_check)
+        
+        # changed to require at least num_changes_to_check
         # without has_any_non_WT_in_insertion its allowing reads with non-TE matches in insertion region to be categorized as Imperfect_WT - with it causes more issues
         # has_any_TE_in_insertion = (ins_match_arr.count("T") > 0)
-        has_any_TE_in_insertion = (ins_match_arr.count("T") > 1) # require at least 2 TE matches to avoid misclassifying WT-like reads as PE-like.
+        # has_any_TE_in_insertion = (ins_match_arr.count("T") > 1) # require at least 2 TE matches to avoid misclassifying WT-like reads as PE-like.
+        has_any_TE_in_insertion = (ins_match_arr.count("T") >= num_changes_to_check)
         # has_any_WT_in_insertion = (ins_match_arr.count("W") > 0)
 
         total_WT_count = match_arr.count("W")
@@ -895,6 +1040,22 @@ def classify_crispresso_output(
         if ins_match_arr == ['T']*len(ins_match_arr):
             perfect_T_count += allele['#Reads']
 
+        for pos_idx, match in zip(range(len(bp_changes_arr)), match_arr):
+            if match == 'T':
+                full_edit_counts[pos_idx] += allele['#Reads']
+                if has_indel:
+                    full_edit_counts_with_indels[pos_idx] += allele['#Reads']
+                else:
+                    full_edit_counts_no_indels[pos_idx] += allele['#Reads']
+            if match == 'D':
+                full_deletion_counts[pos_idx] += allele['#Reads']
+            if match == "I":
+                full_insertion_counts[pos_idx] += allele["#Reads"]
+            if match == "S":
+                full_substitution_counts[pos_idx] += allele["#Reads"]
+        if match_arr == ['T']*len(match_arr):
+            full_perfect_T_count += allele['#Reads']
+
     folder_category_counts = {
         "WT": cat_wt_count,
         "WT Indel": cat_wt_indel_count,
@@ -907,6 +1068,26 @@ def classify_crispresso_output(
         "Uncategorized": cat_uncategorized_count,
     }
 
+    #### Debugging ####
+    # for c in df_alleles['Category'].unique():
+    #     print(f"Category: {c}")
+    #     for i, row in df_alleles.iterrows():
+    #         if row['Category'] == c:
+    #             print(i)
+    #             print(row['Aligned_Sequence'])
+    #             print(row["Reference_Sequence"])
+
+    # for i, row in df_alleles.iterrows():
+    #     if row['Category'] == 'Imperfect_PE':
+    #         print(i)
+    #         print(row['Aligned_Sequence'])
+    #         print(row["Reference_Sequence"])
+    # write df to csv file
+    # df_alleles.to_csv(
+    #     os.path.join(output_root, "c0.detailed_allele_table_with_categories.csv"),
+    #     index=False,
+    # )
+
     with open(
         os.path.join(output_root, "c4.top_alleles_by_category.txt"), "w"
     ) as fout:
@@ -918,14 +1099,18 @@ def classify_crispresso_output(
                 fout.write(f"{row['Aligned_Sequence']}\n")
                 fout.write(f"{row['Reference_Sequence']}\n")
             fout.write("\n")
+    #########################
+
 
     imperfect_from_left_all_edit_counts = [x-perfect_T_count for x in from_left_all_edit_counts] # these are reads that start with a twin-edited, but are not completely twin-edited. Note that from_left_all_edit_counts includes perfect matches
     imperfect_from_right_all_edit_counts = [x-perfect_T_count for x in from_right_all_edit_counts]
     # number of perfect_PE alleles at each position - now excludes those with indels
     # should this take indels into account? - what exactly are these two plots that use this trying to show?
     perfect_edit_counts = [perfect_T_count] * ins_region_len
+    full_perfect_edit_counts = [full_perfect_T_count] * len(bp_changes_arr)
     # total alleles
     total_counts = [total_alleles_reads] * ins_region_len
+    full_total_counts = [total_alleles_reads] * len(bp_changes_arr)
 
     with open(output_root + "/c3.allele_counts.txt", "w") as fout:
         sorted_allele_counts = sorted(
@@ -1023,11 +1208,16 @@ def classify_crispresso_output(
         "df_alleles": df_alleles,
         "bp_changes_arr": bp_changes_arr,
         "edit_counts": edit_counts,
+        "full_edit_counts": full_edit_counts,
         "perfect_edit_counts": perfect_edit_counts,
         "deletion_counts": deletion_counts,
         "insertion_counts": insertion_counts,
         "substitution_counts": substitution_counts,
         "total_counts": total_counts,
+        "full_deletion_counts": full_deletion_counts,
+        "full_insertion_counts": full_insertion_counts,
+        "full_substitution_counts": full_substitution_counts,
+        "full_total_counts": full_total_counts,
         "cat_wt_count_arr": cat_wt_count_arr,
         "cat_wt_indel_count_arr": cat_wt_indel_count_arr,
         "cat_left_flap_count_arr": cat_left_flap_count_arr,
@@ -1053,7 +1243,9 @@ def classify_crispresso_output(
         "wt_aln_seq": wt_aln_seq,
         "twin_aln_seq": twin_aln_seq, 
         "ins_start": ins_start, 
-        "ins_end": ins_end
+        "ins_end": ins_end, 
+        "del_start": del_start,
+        "del_end": del_end
     }
 
 
@@ -1081,8 +1273,8 @@ def plot_reads_input_summary_barplot(crispresso_output_folder, fig_root=None, pr
     sorted_labels = [p[0] for p in sorted_pairs]
     sorted_values = [p[1] for p in sorted_pairs]
 
-    percent_labels = [f"{lab}\n({val:,})" for lab, val in sorted_pairs]
-    # percent_labels = [f"{lab}\n({val/total*100:.1f}%)" for lab, val in sorted_pairs]
+    percent_labels = [f"{lab}\n({val/total*100:.1f}%)" for lab, val in sorted_pairs]
+    # percent_labels = [f"{lab}\n({val:}%)" for lab, val in sorted_pairs]
     # percent_labels = [f"{lab}\n({val:,})" if val == total else f"{lab}\n({val:,} | {val/total*100:.1f}%)" for lab, val in sorted_pairs]
 
     # use default mpl color cycle
@@ -1098,12 +1290,13 @@ def plot_reads_input_summary_barplot(crispresso_output_folder, fig_root=None, pr
     # add percentage labels
     for bar in bars:
         height = bar.get_height()
-        percentage = (height / total) * 100
-        percetange_label = f"{percentage:.1f}%"
+        # percentage = (height / total) * 100
+        # percetange_label = f"{percentage:.1f}%"
             
         ax.text(bar.get_x() + bar.get_width()/2.,
                 height,
-                percetange_label,
+                f"{height:,}", 
+                # percetange_label,
                 ha='center',
                 va='bottom',
                 fontsize=10,
@@ -1130,7 +1323,8 @@ def plot_reads_input_summary_barplot(crispresso_output_folder, fig_root=None, pr
         plt.savefig(fig_root + "/a1.Reads_input_summary.png", bbox_inches='tight')
 
 
-def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root=None, produce_png=False):
+def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root=None, produce_png=False, category_colors=None):
+
     aligned_labels = list(counts_dict.keys())
     aligned_counts = list(counts_dict.values())
     crispresso_mapping_statistics_file = os.path.join(crispresso_output_folder, 'CRISPResso_mapping_statistics.txt')
@@ -1147,10 +1341,12 @@ def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root
     x = [0]
     bottom = 0
     for (lab, val), legend_label in zip(sorted_counts_labels, legend_labels):
+        color = category_colors.get(lab, "black")
         axes[0].bar(
             x, val, 
             bottom=bottom, 
             label=legend_label, 
+            color=color, 
             edgecolor='white',
             linewidth=.3
         )
@@ -1168,7 +1364,7 @@ def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root
     handles = handles[::-1]
     labels = labels[::-1]
     handles.append(bar2[0])
-    labels.append(f"Unaligned Reads")
+    # labels.append(f"Unaligned Reads")
     # labels.append(f"Unaligned ({unaligned_count/ (total) * 100:.1f}%)")
     axes[0].legend(
         handles, labels,
@@ -1180,6 +1376,7 @@ def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root
     # axes[1].legend(loc='center left', bbox_to_anchor=(1, 0.5))
 
     axes[0].set_xticks([])
+    axes[0].set_xlabel("Aligned Reads", fontsize=8)
     axes[0].set_ylabel("Counts", fontsize=8)
     axes[0].spines['top'].set_visible(False)
     axes[0].spines['right'].set_visible(False)
@@ -1189,6 +1386,7 @@ def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root
     axes[0].tick_params(axis="y", labelsize=8)
 
     axes[1].set_xticks([])
+    axes[1].set_xlabel("Unaligned Reads", fontsize=8)
     axes[1].spines['top'].set_visible(False)
     axes[1].spines['right'].set_visible(False)
     axes[1].spines['left'].set_visible(False)
@@ -1202,12 +1400,12 @@ def plot_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root
     # ax.legend(bbox_to_anchor=(1, .5), loc="center left", borderaxespad=0.25)
 
     # plt.tight_layout()
-    plt.savefig(fig_root + "/a3.Summary_stacked.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a2.Category_summary_stacked.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a3.Summary_stacked.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a2.Category_summary_stacked.png", bbox_inches='tight')
 
 
-def plot_summary_barplot(counts_dict, fig_root=None, produce_png=False):
+def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False, category_colors=None):
     labels = list(counts_dict.keys())
     counts = list(counts_dict.values())
 
@@ -1221,14 +1419,15 @@ def plot_summary_barplot(counts_dict, fig_root=None, produce_png=False):
     percent_labels = [f"{lab}\n({val/total*100:.1f}%)" for lab, val in sorted_pairs]
 
     # use default mpl color cycle
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
-    bar_colors = [colors[i % len(colors)] for i in range(len(sorted_values))]
+    # colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+    # bar_colors = [colors[i % len(colors)] for i in range(len(sorted_values))]
+    colors = [category_colors.get(lab, "black") for lab in sorted_labels]
 
     fig, ax = plt.subplots(figsize=(7, 4), dpi=300)
 
     # plot bar chart
     bars = ax.bar(sorted_labels, sorted_values, 
-                color=bar_colors, edgecolor="white", linewidth=0.6)
+                color=colors, edgecolor="white", linewidth=0.6)
     
     # add value labels
     for bar in bars:
@@ -1257,9 +1456,58 @@ def plot_summary_barplot(counts_dict, fig_root=None, produce_png=False):
 
     plt.tight_layout()
 
-    plt.savefig(fig_root + "/a2.Summary.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a3.Category_summary.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a2.Summary.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a3.Category_summary.png", bbox_inches='tight')
+
+
+# def plot_stacked_summary_barplot(counts_dict, fig_root=None, produce_png=False):
+#     labels = list(counts_dict.keys())
+#     counts = list(counts_dict.values())
+
+#     sorted_counts_labels = sorted(zip(labels, counts), key=lambda x: x[1], reverse=True)
+#     total = sum(counts)
+#     legend_labels = [f"{lab} ({val/total*100:.1f}%)" for lab, val in sorted_counts_labels]
+#     fig, ax = plt.subplots(figsize=(3.5, 6), dpi=300) # dpi=300
+
+#     x = [0]
+#     bottom = 0
+#     # plot stacked bar
+#     for (lab, val), legend_label in zip(sorted_counts_labels, legend_labels):
+#         ax.bar(
+#             x, val, 
+#             bottom=bottom, 
+#             label=legend_label, 
+#             edgecolor='white',
+#             linewidth=.3
+#         )
+#         bottom += val
+
+#     ax.set_xticks([])
+#     ax.set_ylabel("Counts", fontsize=12)
+
+#     ax.spines['top'].set_visible(False)
+#     ax.spines['right'].set_visible(False)
+
+#     ax.minorticks_on()
+#     ax.tick_params(axis="y", which="minor", length=3, width=0.8)
+#     ax.tick_params(axis="y", which="major", length=5, width=1)
+
+
+#     handles, labels = ax.get_legend_handles_labels()
+#     ax.legend(
+#         handles[::-1], labels[::-1],
+#         bbox_to_anchor=(1, .5),
+#         loc="center left",
+#         borderaxespad=0.25
+#     )
+#     # ax.legend(bbox_to_anchor=(1, .5), loc="center left", borderaxespad=0.25)
+
+#     plt.tight_layout()
+
+#     plt.savefig(fig_root + "/Summary_barplot_stacked.pdf")
+#     if produce_png:
+#         plt.savefig(fig_root + "/Summary_barplot_stacked.png")
 
 
 def plot_successful_twin_edit_counts_by_category(
@@ -1277,7 +1525,8 @@ def plot_successful_twin_edit_counts_by_category(
     ins_start, 
     ins_end,
     fig_root=None,
-    produce_png=False
+    produce_png=False, 
+    category_colors=None,
 ):
 
     # Indices for the x-axis
@@ -1288,19 +1537,19 @@ def plot_successful_twin_edit_counts_by_category(
 
     # This is actually the only stacked bar plot - none of the others are stacked
     # Stacked bar plot
-    ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect PE")
+    ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect PE", color=category_colors["Perfect PE"])
     bottom_so_far = cat_perfect_pe_count_arr
 
-    ax.bar(indices, cat_left_flap_count_arr, label="Left Flap", bottom=bottom_so_far)
+    ax.bar(indices, cat_left_flap_count_arr, label="Left Flap", color=category_colors["Left Flap"], bottom=bottom_so_far)
     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_left_flap_count_arr)]
 
-    ax.bar(indices, cat_right_flap_count_arr, label="Right Flap", bottom=bottom_so_far)
+    ax.bar(indices, cat_right_flap_count_arr, label="Right Flap", color=category_colors["Right Flap"], bottom=bottom_so_far)
     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_right_flap_count_arr)]
 
-    ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect PE", bottom=bottom_so_far)
+    ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect PE", color=category_colors["Imperfect PE"], bottom=bottom_so_far)
     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_pe_count_arr)]
     
-    ax.bar(indices, cat_pe_indels_count_arr, label="PE Indels", bottom=bottom_so_far)
+    ax.bar(indices, cat_pe_indels_count_arr, label="PE Indel", color=category_colors["PE Indel"], bottom=bottom_so_far)
     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_pe_indels_count_arr)]
 
     # By definition these cannot have any 'successful twin edits' so not including
@@ -1320,18 +1569,20 @@ def plot_successful_twin_edit_counts_by_category(
     ax.set_xlabel("Compound Reference Index")
     ax.set_ylabel("Read Counts")
     # ax.set_title("Successful Twin Edit Counts by Category")
-    ax.set_title("Stacked Successful Twin Edits by Category")
+    ax.set_title("Stacked Per-Position Twin Prime Editing Across Inserted Region by Category")
 
     ax.set_xticks(indices)
     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     # Dynamic? >35 x-tick = font 8 & rotate 45
     ax.tick_params(axis="x", labelsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     ax.legend()
     plt.tight_layout()
     
-    plt.savefig(fig_root + "/a4.Successful_edit_counts_by_category.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a4.Successful_edit_counts_by_category.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.png", bbox_inches='tight')
 
 
 def plot_total_read_counts(
@@ -1347,7 +1598,8 @@ def plot_total_read_counts(
     ins_start, 
     ins_end,
     fig_root=None,
-    produce_png=False,
+    produce_png=False, 
+    category_colors=None
 ):
 
     # Indices for the x-axis
@@ -1357,16 +1609,16 @@ def plot_total_read_counts(
     fig, ax = plt.subplots(figsize=(14, 6))
 
     # total number of alleles at each position
-    ax.bar(indices, total_counts, label="Total Counts")
+    ax.bar(indices, total_counts, label="Total Reads", color=category_colors["PE Indel"], alpha=1.0)
     # number of alleles with "T"s at each position
-    ax.bar(indices, edit_counts, label="Total TPEs")
+    ax.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
     # number of alleles with continuous "T"s from right at each position
-    ax.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right")
+    ax.bar(indices, from_right_all_edit_counts, color=category_colors["Right Flap"], label="Continuous TPEs From Right", alpha=1.0)
     # number of alleles with continuous "T"s from left at each position
-    ax.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left")
+    ax.bar(indices, from_left_all_edit_counts, color=category_colors["Left Flap"], label="Continuous TPEs From Left", alpha=0.75)
     # this perfect_PE seems out of place for this plot?
     # number of perfect_PE alleles at each position - changed above to support indels - is this wanted?
-    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs")
+    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
     # # number of alleles with "D"s at each position
     # ax.bar(indices, deletion_counts, label="Deletions")
     # # number of alleles with "I"s at each position
@@ -1378,18 +1630,20 @@ def plot_total_read_counts(
     ax.set_xlabel('Compound Reference Index')
     ax.set_ylabel('Read Counts')
     # ax.set_title("Edit Counts")
-    ax.set_title("Successful Twin Edit Counts - All Alleles")
+    ax.set_title("Per-Position Twin Prime Editing Across Inserted Region - All Reads")
 
     ax.set_xticks(indices)
     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     # Dynamic? >35 x-tick = font 8 & rotate 45
     ax.tick_params(axis="x", labelsize=8)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     ax.legend()
     plt.tight_layout()
 
-    plt.savefig(fig_root + "/a5.Successful_edit_counts_total.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a5.TPE_profile_all_reads.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a5.Successful_edit_counts_total.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a5.TPE_profile_all_reads.png", bbox_inches='tight')
 
 
 def plot_edit_read_counts(
@@ -1404,7 +1658,8 @@ def plot_edit_read_counts(
     ins_start, 
     ins_end,
     fig_root=None,
-    produce_png=False,
+    produce_png=False, 
+    category_colors=None
 ):
 
     # Indices for the x-axis
@@ -1414,10 +1669,10 @@ def plot_edit_read_counts(
     fig, ax = plt.subplots(figsize=(14, 6))
 
     # Stacked bar plot
-    ax.bar(indices, edit_counts, label="Total TPEs")
-    ax.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right")
-    ax.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left")
-    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs")
+    ax.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right", color=category_colors["Right Flap"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left", color=category_colors["Left Flap"], alpha=0.75)
+    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
     # ax.bar(indices, deletion_counts, label="Deletions")
     # ax.bar(indices, insertion_counts, label="Insertions")
     # ax.bar(indices, substitution_counts, label="Substitutions")
@@ -1426,18 +1681,20 @@ def plot_edit_read_counts(
     ax.set_xlabel("Compound Reference Index")
     ax.set_ylabel("Read Counts")
     # ax.set_title("Successful Twin Edit Counts")
-    ax.set_title("Successful Twin Edit Counts - Edited Alleles")
+    ax.set_title("Per-Position Twin Prime Editing Across Inserted Region - Edited Reads")
 
     ax.set_xticks(indices)
     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     # Dynamic? >35 x-tick = font 8 & rotate 45
     ax.tick_params(axis="x", labelsize=8)
     ax.legend(loc='lower right')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
     plt.tight_layout()
 
-    plt.savefig(fig_root + "/a6.Successful_edit_counts.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a6.TPE_profile_edited_reads.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a6.Successful_edit_counts.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a6.TPE_profile_edited_reads.png", bbox_inches='tight')
 
 
 def plot_edit_read_counts_with_indels(
@@ -1451,7 +1708,8 @@ def plot_edit_read_counts_with_indels(
     ins_start, 
     ins_end,
     fig_root=None,
-    produce_png=False,
+    produce_png=False, 
+    category_colors=None
 ):
 
     # Indices for the x-axis
@@ -1462,87 +1720,95 @@ def plot_edit_read_counts_with_indels(
 
     # Stacked bar plot
     # number of "T"s at each position
-    ax1.bar(indices, edit_counts, label="Total TPEs")
+    ax1.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Perfect PE"])
     # number of "T"s at each position for match_arr's that have indels
     ax1.bar(
-        indices, edit_counts_with_indels, label="TPEs with Indels"
+        indices, edit_counts_with_indels, label="TPEs with Indels", color=category_colors["WT"]
     )
 
     # Adding labels and title
     ax1.set_xlabel('Compound Reference Index')
     ax1.set_ylabel('Read Counts')
-    ax1.set_title('Successful Twin Edit Counts')
+    ax1.set_title('Per-Position Twin Prime Editing With and Without Indels Across Inserted Region')
 
     ax1.set_xticks(indices)
     ax1.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     ax1.tick_params(axis="x", labelsize=8)
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
     ax1.legend()
 
     # Stacked bar plot
     # number of continuous "T"s from left at each position
-    ax2.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left")
+    ax2.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left", color=category_colors["Left Flap"])
     # number of continuous "T"s from left at each position for match_arr's that have indels
     ax2.bar(
         indices,
         from_left_all_edit_counts_with_indels,
-        label="Continuous TPEs From Left with Indels",
+        label="Continuous TPEs From Left with Indels", 
+        color=category_colors["WT"]
     )
 
     # Adding labels and title
     ax2.set_xlabel('Compound Reference Index')
     ax2.set_ylabel('Read Counts')
-    ax2.set_title('Twin Edit From Left Counts')
+    # ax2.set_title('Twin Edit From Left Counts')
 
     ax2.set_xticks(indices)
     ax2.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     ax2.tick_params(axis="x", labelsize=8)
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
     ax2.legend()
 
     # Stacked bar plot
     # number of continuous "T"s from right at each position
-    ax3.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right")
+    ax3.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right", color=category_colors["Right Flap"])
     # number of continuous "T"s from right at each position for match_arr's that have indels
     ax3.bar(
         indices,
         from_right_all_edit_counts_with_indels,
-        label="Continuous TPEs From Right with Indels",
+        label="Continuous TPEs From Right with Indels", 
+        color=category_colors["WT"]
     )
 
     # Adding labels and title
     ax3.set_xlabel('Compound Reference Index')
     ax3.set_ylabel('Read Counts')
-    ax3.set_title('Twin Edit From Right Counts')
+    # ax3.set_title('Twin Edit From Right Counts')
 
     ax3.set_xticks(indices)
     ax3.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
     # Dynamic? >35 x-tick = font 8 & rotate 45
     ax3.tick_params(axis="x", labelsize=8)
+    ax3.spines['top'].set_visible(False)
+    ax3.spines['right'].set_visible(False)
     ax3.legend()
     plt.tight_layout()
 
-    plt.savefig(fig_root + "/a7.Edited_reads_vs_indels.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a7.TPEs_vs_indels.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a7.Edited_reads_vs_indels.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a7.TPEs_vs_indels.png", bbox_inches='tight')
 
 
-def plot_editing_summary(deletion_counts, insertion_counts, substitution_counts, edit_counts, total_counts, ins_start, ins_end, fig_root=None, produce_png=False):
-    x = np.arange(len(deletion_counts))
+def plot_editing_summary(full_deletion_counts, full_insertion_counts, full_substitution_counts, full_edit_counts, full_total_counts, ins_start, ins_end, del_start, del_end, fig_root=None, produce_png=False, category_colors=None):
+    x = np.arange(len(full_deletion_counts))
     w = 0.27
-    x_labels = [str(x) for x in range(ins_start, ins_end+1)]
+    x_labels = [str(x) for x in range(del_start, ins_end+1)]
 
-    misedit_counts = np.array(deletion_counts) + np.array(insertion_counts) + np.array(substitution_counts)
-    unedited_counts = np.array(total_counts) - np.array(edit_counts) - np.array(misedit_counts)
+    misedit_counts = np.array(full_deletion_counts) + np.array(full_insertion_counts) + np.array(full_substitution_counts)
+    unedited_counts = np.array(full_total_counts) - np.array(full_edit_counts) - np.array(misedit_counts)
     misedit_counts = misedit_counts.tolist()
     unedited_counts = unedited_counts.tolist()
 
     plt.figure(figsize=(16,4), dpi=300)
 
-    plt.bar(x - w, edit_counts, width=w, label="Edited")
-    plt.bar(x, unedited_counts, width=w, label="Unedited")
-    plt.bar(x + w, misedit_counts, width=w, label="Misedited")
+    plt.bar(x - w, full_edit_counts, width=w, label="Edited", color=category_colors["Perfect PE"])
+    plt.bar(x, unedited_counts, width=w, label="Unedited", color=category_colors["Left Flap"])
+    plt.bar(x + w, misedit_counts, width=w, label="Misedited", color=category_colors["Right Flap"])
 
     # Show all x-axis labels
-    plt.xticks(x, x_labels, rotation=45, ha="center", fontsize=8)
+    plt.xticks(x, x_labels, rotation=45, ha="center", fontsize=7)
     plt.minorticks_on()
     plt.tick_params(axis="y", which="minor")
     plt.tick_params(axis="y", which="major")
@@ -1551,29 +1817,31 @@ def plot_editing_summary(deletion_counts, insertion_counts, substitution_counts,
     # plt.xlabel("TwinPE Edit Index")
     plt.xlabel("Compound Reference Index")
     plt.ylabel("Counts")
-    plt.title("Editing Summary")
+    plt.title("Per-Position Editing Across Deleted and Inserted Regions")
+    plt.gca().spines['top'].set_visible(False)
+    plt.gca().spines['right'].set_visible(False)
     plt.legend()
     plt.tight_layout()
 
-    plt.savefig(fig_root + "/a8.Editing_summary.pdf", bbox_inches='tight')
+    plt.savefig(fig_root + "/a8.Edit_type_summary.pdf", bbox_inches='tight')
     if produce_png:
-        plt.savefig(fig_root + "/a8.Editing_summary.png", bbox_inches='tight')
+        plt.savefig(fig_root + "/a8.Edit_type_summary.png", bbox_inches='tight')
 
 
-def plot_nonprogrammed_edit_counts(deletion_counts, insertion_counts, substitution_counts, ins_start, ins_end, fig_root=None, produce_png=False):
-    x = np.arange(len(deletion_counts))
+def plot_nonprogrammed_edit_counts(full_deletion_counts, full_insertion_counts, full_substitution_counts, ins_start, ins_end, del_start, del_end, fig_root=None, produce_png=False):
+    x = np.arange(len(full_deletion_counts))
     w = 0.27
-    x_labels = [str(x) for x in range(ins_start, ins_end+1)]
+    x_labels = [str(x) for x in range(del_start, ins_end+1)]
 
 
     plt.figure(figsize=(16,4), dpi=300)
 
-    plt.bar(x - w, deletion_counts, width=w, label="Deletions")
-    plt.bar(x, insertion_counts, width=w, label="Insertions")
-    plt.bar(x + w, substitution_counts, width=w, label="Substitutions")
+    plt.bar(x - w, full_deletion_counts, width=w, label="Deletions")
+    plt.bar(x, full_insertion_counts, width=w, label="Insertions")
+    plt.bar(x + w, full_substitution_counts, width=w, label="Substitutions")
 
     # Show all x-axis labels
-    plt.xticks(x, x_labels, rotation=45, ha="center", fontsize=8)
+    plt.xticks(x, x_labels, rotation=45, ha="center", fontsize=7)
     plt.minorticks_on()
     plt.tick_params(axis="y", which="minor")
     plt.tick_params(axis="y", which="major")
@@ -2532,6 +2800,132 @@ def plot_alleles_heatmap(
     plt.close(fig)
 
 
+# def get_dataframe_allele_region(
+#     df_alleles, pegRNA_intervals, ref_seq, ref_aln_seq, twin_aln_seq, cut_points
+# ):
+#     """
+#     Extract region of interest for plotting allele tables based on pegRNA positions on reference sequence.
+#     Returns modified reference sequence and cut points.
+#     """
+#     #### Previous new method ####
+#     # support single or dual pegRNAs
+#     # if df_alleles.shape[0] == 0:
+#     #     return df_alleles
+#     # if len(pegRNA_intervals) == 2:
+#     #     left_end = max(0, pegRNA_intervals[0][0] - 20)
+#     #     right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 20)
+#     #     cut_points[0] = cut_points[0] - left_end
+#     #     cut_points[1] = cut_points[1] - left_end
+#     # elif len(pegRNA_intervals) == 1:
+#     #     left_end = max(0, pegRNA_intervals[0][0] - 80)
+#     #     right_end = min(len(ref_seq), pegRNA_intervals[0][1] + 80)
+#     #     cut_points = pegRNA_intervals[0][1] - 3
+#     #### End of Previous new method ####
+
+#     #### New method for single and double guide RNAs - don't need to account for single guide RNAs
+#     if df_alleles.shape[0] == 0:
+#         # Return empty frame and pass-through sequences, with None for coords
+#         return df_alleles, ref_seq, ref_aln_seq, twin_aln_seq, cut_points, pegRNA_intervals
+
+#     # Default padding
+#     if len(pegRNA_intervals) == 2:
+#         # left_end  = max(0, pegRNA_intervals[0][0] - 20)
+#         left_end  = max(0, pegRNA_intervals[0][0] - 50)
+#         right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 80)
+#     elif len(pegRNA_intervals) == 1:
+#         # left_end  = max(0, pegRNA_intervals[0][0] - 80)
+#         left_end  = 0
+#         # right_end = min(len(ref_seq), pegRNA_intervals[0][1] + 80)
+#         right_end = len(ref_seq)-1
+#     else:
+#         # Fallback: show full sequence
+#         left_end, right_end = 0, len(ref_seq)
+
+#     # Shift cut points into window coords (if provided)
+#     cut_points_window = None
+#     if cut_points is not None:
+#         try:
+#             cut_points_window = [cp - left_end for cp in cut_points]
+#         except TypeError:
+#             # Single integer
+#             cut_points_window = [cut_points - left_end]
+
+#     # Shift sgRNA intervals into window coords
+#     pegRNA_intervals_window = []
+#     if pegRNA_intervals is not None:
+#         for (s, e) in pegRNA_intervals:
+#             pegRNA_intervals_window.append((s - left_end, e - left_end))
+#     ##### END OF NEW METHOD ######
+
+#     #### Original method ####
+#     # if df_alleles.shape[0] == 0:
+#     #     return df_alleles
+
+#     # left_end = max(0, pegRNA_intervals[0][0] - 20)
+#     # right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 20)
+
+#     # cut_points[0] = cut_points[0] - left_end
+#     # cut_points[1] = cut_points[1] - left_end
+#     #### End of Original method ####
+
+
+#     # don’t overwrite original
+#     df = df_alleles.copy()
+
+#     # group first
+#     df = (
+#         df.groupby(['Aligned_Sequence', 'Reference_Sequence', 'Read_Status',
+#                     'n_deleted', 'n_inserted', 'n_mutated'], dropna=False)
+#           .sum()
+#           .reset_index()
+#     )
+#     # then slice
+#     df['Aligned_Sequence']   = df['Aligned_Sequence'].str.slice(left_end, right_end)
+#     df['Reference_Sequence'] = df['Reference_Sequence'].str.slice(left_end, right_end)
+
+#     df = df.set_index('Aligned_Sequence')
+
+#     # Caused bug by slicing before grouping
+#     # # Slice the two sequence columns only
+#     # df["Aligned_Sequence"] = df["Aligned_Sequence"].str.slice(left_end, right_end)
+#     # df["Reference_Sequence"] = df["Reference_Sequence"].str.slice(left_end, right_end)
+
+#     # # Aggregate counts by sequence + metadata
+#     # df = (
+#     #     df.groupby(
+#     #         [
+#     #             "Aligned_Sequence",
+#     #             "Reference_Sequence",
+#     #             "Read_Status",
+#     #             "n_deleted",
+#     #             "n_inserted",
+#     #             "n_mutated",
+#     #         ],
+#     #         dropna=False,
+#     #     )
+#     #     .sum()
+#     #     .reset_index()
+#     #     .set_index("Aligned_Sequence")
+#     # )
+
+#     df.sort_values(
+#         by=["#Reads", "Aligned_Sequence", "Reference_Sequence"],
+#         ascending=[False, True, True],
+#         inplace=True,
+#     )
+
+#     df["Unedited"] = df["Read_Status"].eq("UNMODIFIED")
+
+#     return (
+#         df,
+#         ref_seq[left_end:right_end],
+#         ref_aln_seq[left_end:right_end],
+#         twin_aln_seq[left_end:right_end],
+#         cut_points,
+#         pegRNA_intervals_window
+#     )
+
+
 def get_dataframe_allele_region(
     df_alleles,
     pegRNA_intervals,
@@ -2554,23 +2948,23 @@ def get_dataframe_allele_region(
 
     ordered_intervals = sorted(list(pegRNA_intervals or []), key=lambda x: x[0])
 
-    # compute initial window bounds on aligned string indices
+    # Compute initial window bounds (on aligned string indices)
     start_idx = 0
     stop_idx_excl = len(ref_aln_seq)
     if window_by_intervals and len(ordered_intervals) >= 1:
         first_start = ordered_intervals[0][0]
-        last_end_incl = ordered_intervals[-1][1]
-        # apply padding and clamp
+        last_end_incl = ordered_intervals[-1][1]  # inclusive end
+        # Apply padding and clamp
         left_bound = max(0, int(first_start) - int(left_pad))
         right_bound_incl = min(len(ref_aln_seq) - 1, int(last_end_incl) + int(right_pad))
         start_idx = left_bound
         stop_idx_excl = right_bound_incl + 1
 
-    # slice all aligned strings to the window first
+    # Slice all aligned strings to the window first
     ref_aln_seq_win  = ref_aln_seq[start_idx:stop_idx_excl] if isinstance(ref_aln_seq, str) else ref_aln_seq
     twin_aln_seq_win = twin_aln_seq[start_idx:stop_idx_excl] if isinstance(twin_aln_seq, str) else twin_aln_seq
 
-    # aggregate counts but DO NOT slice by arbitrary lengths yet
+    # Aggregate counts but DO NOT slice by arbitrary lengths yet
     df = df_alleles.copy()
     df = (
         df.groupby(
@@ -2580,13 +2974,13 @@ def get_dataframe_allele_region(
         ).sum().reset_index()
     )
 
-    # slice allele strings to the window (if present)
+    # Slice allele strings to the window (if present)
     if 'Aligned_Sequence' in df.columns:
         df['Aligned_Sequence'] = df['Aligned_Sequence'].astype(str).str.slice(start_idx, stop_idx_excl)
     if 'Reference_Sequence' in df.columns:
         df['Reference_Sequence'] = df['Reference_Sequence'].astype(str).str.slice(start_idx, stop_idx_excl)
 
-    # determine smallest length across aligned strings in the window
+    # Determine smallest length across aligned strings in the window
     min_len_candidates = []
     if isinstance(ref_aln_seq_win, str):
         min_len_candidates.append(len(ref_aln_seq_win))
@@ -2601,7 +2995,7 @@ def get_dataframe_allele_region(
                     min_len_candidates.append(int(lens.min()))
     min_len = max(0, min(min_len_candidates)) if min_len_candidates else len(ref_aln_seq_win)
 
-    # final trim to shortest length
+    # Final trim to shortest length
     ref_aln_seq_trim  = ref_aln_seq_win[:min_len] if isinstance(ref_aln_seq_win, str) else ref_aln_seq_win
     twin_aln_seq_trim = twin_aln_seq_win[:min_len] if isinstance(twin_aln_seq_win, str) else twin_aln_seq_win
     if 'Aligned_Sequence' in df.columns:
@@ -2609,7 +3003,7 @@ def get_dataframe_allele_region(
     if 'Reference_Sequence' in df.columns:
         df['Reference_Sequence'] = df['Reference_Sequence'].astype(str).str.slice(0, min_len)
 
-    # adjust cut points from global to window coords, then clamp to min_len
+    # Adjust cut points from global to window coords, then clamp to min_len
     cut_points_window = None
     if cut_points is not None:
         try:
@@ -2620,7 +3014,7 @@ def get_dataframe_allele_region(
         cps = [cp - start_idx for cp in cps]
         cut_points_window = [max(0, min(int(cp), max(0, min_len - 1))) for cp in cps]
 
-    # adjust intervals from global to window coords, then clamp to [0, min_len]
+    # Adjust intervals from global to window coords, then clamp to [0, min_len]
     pegRNA_intervals_window = []
     for (s, e) in ordered_intervals:
         s_win = int(s) - start_idx
@@ -2655,6 +3049,97 @@ def setAlleleMatplotlibDefaults():
     sns.set(style="white", font_scale=2.2)
 
 
+# def plot_categorical_allele_tables(
+#     min_frequency,
+#     max_n_rows,
+#     df_alleles,
+#     ref_seq,
+#     ref_aln_seq,
+#     twin_aln_seq,
+#     pegRNA_cut_points,
+#     pegRNA_plot_cut_points,
+#     pegRNA_intervals,
+#     pegRNA_mismatches,
+#     pegRNA_names,
+#     spacer_info,
+#     fig_root=None,
+#     produce_png=False,
+# ):
+#     """ """
+
+#     # need to implement custom names in args
+#     if pegRNA_names == ["", ""]:
+#         pegRNA_names = ["pegRNA", "pegRNA"]
+
+#     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
+#         b_extra = spacer_info['spacer_b_num_bases_removed']
+#     else:
+#         b_extra = spacer_info['spacer_a_num_bases_removed']
+
+#     pegRNA_cut_points[1] = pegRNA_cut_points[1] - b_extra
+
+#     # allele_table_plotted_count = 0
+#     # for cat in df_alleles["Category"].unique():
+#     for cat, name in [("Perfect_PE", "b1.Perfect_PE"), 
+#                       ("PE_Indel", "b2.PE_Indel"),
+#                       ("Imperfect_PE", "b3.Imperfect_PE"), 
+#                       ("Left_Flap", "b4.Left_Flap"), 
+#                       ("Right_Flap", "b5.Right_Flap"), 
+#                       ("Imperfect_WT", "b6.Imperfect_WT"), 
+#                       ("WT_Indel", "b7.WT_Indel"), 
+#                       ("WT", "b8.WT"), 
+#                       ("Uncategorized", "b9.Uncategorized")]:
+#         if len(df_alleles[df_alleles["Category"] == cat]) > 0:
+#             df_alleles_cat = df_alleles[df_alleles["Category"] == cat]
+#             (
+#                 df_alleles_around_region,
+#                 ref_seq_region,
+#                 ref_aln_seq_region,
+#                 twin_aln_seq_region,
+#                 pegRNA_cut_points,
+#                 pegRNA_intervals_region
+#             ) = get_dataframe_allele_region(
+#                 df_alleles_cat,
+#                 pegRNA_intervals,
+#                 ref_seq,
+#                 ref_aln_seq,
+#                 twin_aln_seq,
+#                 pegRNA_cut_points,
+#             )
+
+#             X, annot, y_labels, insertion_dict, per_element_annot_kws, is_reference = (
+#                 prep_alleles_table(
+#                     df_alleles_around_region,
+#                     ref_seq_region,
+#                     ref_aln_seq_region,
+#                     twin_aln_seq_region,
+#                     max_n_rows,
+#                     min_frequency,
+#                     pegRNA_intervals
+#                 )
+#             )
+
+#             plot_alleles_heatmap(
+#                 # reference_seq=ref_seq_region,
+#                 reference_aln_seq=ref_aln_seq_region,
+#                 X=X,
+#                 annot=annot,
+#                 y_labels=y_labels,
+#                 insertion_dict=insertion_dict,
+#                 per_element_annot_kws=per_element_annot_kws,
+#                 fig_filename_root=fig_root + f"/{name}",
+#                 SAVE_ALSO_PNG=produce_png,
+#                 plot_cut_point=pegRNA_plot_cut_points,
+#                 cut_point_ind=pegRNA_cut_points,
+#                 sgRNA_intervals=pegRNA_intervals_region,
+#                 sgRNA_names=pegRNA_names,
+#                 sgRNA_mismatches=pegRNA_mismatches,
+#                 category=cat,
+#                 extend_left_non_gap=[0, b_extra]   # per-sgRNA non-gap extension
+#             )
+#             # allele_table_plotted_count += 1
+
+
 def plot_categorical_allele_tables(
     min_frequency,
     max_n_rows,
@@ -2673,18 +3158,18 @@ def plot_categorical_allele_tables(
     plot_full_reads=False
 ):
     """ """
-    # ensure names
+    # Ensure names
     if pegRNA_names == ["", ""]:
         pegRNA_names = ["pegRNA", "pegRNA"]
 
-    # compute b_extra once
+    # Compute b_extra once
     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
         b_extra = spacer_info['spacer_b_num_bases_removed']
     else:
         b_extra = spacer_info['spacer_a_num_bases_removed']
 
-    # do NOT mutate pegRNA_cut_points in place; make ordered, adjusted copies per plot
-    # build a single ordering for intervals and keep related arrays consistent
+    # Do NOT mutate pegRNA_cut_points in place; make ordered, adjusted copies per plot
+    # Build a single ordering for intervals and keep related arrays consistent
     order = None
     if pegRNA_intervals and len(pegRNA_intervals) == 2:
         order = np.argsort([x[0] for x in pegRNA_intervals])
@@ -2700,7 +3185,7 @@ def plot_categorical_allele_tables(
         mismatches_ordered = pegRNA_mismatches
         names_ordered = pegRNA_names
 
-    # adjust second cut point post-ordering
+    # Adjust second cut point (post-ordering)
     if cut_points_ordered and len(cut_points_ordered) == 2:
         cut_points_adjusted = [cut_points_ordered[0], cut_points_ordered[1] - b_extra]
     else:
@@ -2709,9 +3194,9 @@ def plot_categorical_allele_tables(
     for cat, name in [
         ("Perfect_PE", "b1.Perfect_PE"),
         ("PE_Indel", "b2.PE_Indel"),
-        ("Imperfect_PE", "b3.Imperfect_PE"),
-        ("Left_Flap", "b4.Left_Flap"),
-        ("Right_Flap", "b5.Right_Flap"),
+        ("Left_Flap", "b3.Left_Flap"),
+        ("Right_Flap", "b4.Right_Flap"),
+        ("Imperfect_PE", "b5.Imperfect_PE"),
         ("Imperfect_WT", "b6.Imperfect_WT"),
         ("WT_Indel", "b7.WT_Indel"),
         ("WT", "b8.WT"),
@@ -2721,6 +3206,23 @@ def plot_categorical_allele_tables(
             continue
 
         df_alleles_cat = df_alleles[df_alleles["Category"] == cat]
+
+        # (
+        #     df_alleles_around_region,
+        #     ref_seq_region,
+        #     ref_aln_seq_region,
+        #     twin_aln_seq_region,
+        #     cut_points_window,
+        #     pegRNA_intervals_region
+        # ) = get_dataframe_allele_region(
+        #     df_alleles_cat,
+        #     intervals_ordered,
+        #     ref_seq,
+        #     ref_aln_seq,
+        #     twin_aln_seq,
+        #     cut_points_adjusted,
+        # )
+
 
         (
             df_alleles_around_region,
