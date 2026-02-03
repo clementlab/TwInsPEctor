@@ -29,18 +29,34 @@ from matplotlib import colors as colors_mpl
 
 def main():
     args = parse_args()
-    parent_folder, crispresso_output_folder, twinpe_8cat_results_folder = resolve_output_folders(args)
-    os.makedirs(twinpe_8cat_results_folder, exist_ok=True)
-    spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1])
-    comp_ref_seq, wt_aln_seq, twin_aln_seq = build_compound_reference_alignments(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1], spacer_info, twinpe_8cat_results_folder)
-    # compound_ref_seq = build_compound_reference(args.wt_seq, args.twin_seq)
-    crispresso_cmd = build_crispresso_command(args, comp_ref_seq, parent_folder, spacer_info, twinpe_8cat_results_folder)
 
-    print("Running CRISPResso with command:\n", " ".join(crispresso_cmd), "\n")
-    subprocess.run(crispresso_cmd, check=True)
+    parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder = resolve_output_folders(args)
+    crispresso_run_a_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_a")
+    crispresso_run_b_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_b")
+    twinpe_8cat_a_folder = os.path.join(twinpe_8cat_results_folder, "Run_a")
+    twinpe_8cat_b_folder = os.path.join(twinpe_8cat_results_folder, "Run_b")
+
+    os.makedirs(twinpe_8cat_a_folder, exist_ok=True)
+    os.makedirs(twinpe_8cat_b_folder, exist_ok=True)
+    os.makedirs(crispresso_run_a_folder, exist_ok=True)
+    os.makedirs(crispresso_run_b_folder, exist_ok=True)
+
+    spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1])
+    comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = build_compound_reference_alignments(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1], spacer_info, twinpe_8cat_results_folder)
+    # compound_ref_seq = build_compound_reference(args.wt_seq, args.twin_seq)
+
+    crispresso_cmd_a = build_crispresso_command(args, comp_ref_seq_a, crispresso_run_a_folder, spacer_info, twinpe_8cat_a_folder, run_label="a")
+    crispresso_cmd_b = build_crispresso_command(args, comp_ref_seq_b, crispresso_run_b_folder, spacer_info, twinpe_8cat_b_folder, run_label="b")
+
+    print("Running CRISPResso with command:\n", " ".join(crispresso_cmd_a), "\n")
+    subprocess.run(crispresso_cmd_a, check=True)
+    print("Running CRISPResso with command:\n", " ".join(crispresso_cmd_b), "\n")
+    subprocess.run(crispresso_cmd_b, check=True)
+
     print("Analyzing CRISPResso output...")
-    analyze_single_crispresso_output(twinpe_8cat_results_folder, crispresso_output_folder, args, comp_ref_seq, wt_aln_seq, twin_aln_seq, spacer_info)
+    analyze_single_crispresso_output(twinpe_8cat_a_folder, crispresso_output_folder_a, args, comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, spacer_info)
     print("Finished TwinPE analysis!")
+
     sys.exit(0)
 
 
@@ -195,26 +211,38 @@ def build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, sp
 
     prefix_and_deletion = wt_seq[:wt_seq.find(suffix)]
     insertion_and_suffix = twin_seq[len(prefix):]
-    comp_ref_seq = prefix_and_deletion + insertion_and_suffix
+    comp_ref_seq_a = prefix_and_deletion + insertion_and_suffix
+
+    prefix_and_insertion = twin_seq[:twin_seq.find(suffix)]
+    deletion_and_suffix = wt_seq[len(prefix):]
+    comp_ref_seq_b = prefix_and_insertion + deletion_and_suffix
 
     # build WT and TwinPE reference alignments to Compound Reference
-    wt_aln_seq = prefix_and_deletion + (len(insertion_and_suffix)-len(suffix)) * '-' + suffix
-    twin_aln_seq = prefix + (len(prefix_and_deletion)-len(prefix)) * '-' + insertion_and_suffix
+    wt_aln_seq_a = prefix_and_deletion + (len(insertion_and_suffix)-len(suffix)) * '-' + suffix
+    twin_aln_seq_a = prefix + (len(prefix_and_deletion)-len(prefix)) * '-' + insertion_and_suffix
+    wt_aln_seq_b = prefix + (len(prefix_and_insertion)-len(prefix)) * '-' + deletion_and_suffix
+    twin_aln_seq_b = prefix_and_insertion + (len(deletion_and_suffix)-len(suffix)) * '-' + suffix
 
     # validate lengths
-    if not (len(comp_ref_seq) == len(wt_aln_seq) == len(twin_aln_seq)):
+    if not (len(comp_ref_seq_a) == len(wt_aln_seq_a) == len(twin_aln_seq_a)):
         raise ValueError("Compound reference, WT alignment, and Twin alignment sequences are not the same length")
     
     with open(
         os.path.join(output_root, "c5.aligned_reference_sequences.txt"), "w"
     ) as fout:
-        fout.write(f">Wildtype_reference_sequence_alignment\n{wt_aln_seq}\n")
-        fout.write(f">Compound_reference_sequence\n{comp_ref_seq}\n")
-        fout.write(f">TwinPE_reference_sequence_alignment\n{twin_aln_seq}\n")
+        fout.write(f"@Alignment A\n")
+        fout.write(f">Wildtype_reference_sequence\n{wt_aln_seq_a}\n")
+        fout.write(f">Compound_reference_sequence\n{comp_ref_seq_a}\n")
+        fout.write(f">TwinPE_reference_sequence\n{twin_aln_seq_a}\n\n")
+        fout.write(f"@Alignment B\n")
+        fout.write(f">Wildtype_reference_sequence\n{wt_aln_seq_b}\n")
+        fout.write(f">Compound_reference_sequence\n{comp_ref_seq_b}\n")
+        fout.write(f">TwinPE_reference_sequence\n{twin_aln_seq_b}\n\n")
+        fout.write(f"@pegRNA Spacers\n")
         fout.write(f">SpacerA_sequence\n{spacer_a}\n")
         fout.write(f">SpacerB_sequence\n{spacer_b}\n")
 
-    return comp_ref_seq, wt_aln_seq, twin_aln_seq
+    return comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b
 
 # def build_compound_reference(wt_seq, twin_seq):
     # """
@@ -258,32 +286,46 @@ def resolve_output_folders(args):
         parent_folder = os.path.join(os.getcwd(), args.output_root.rstrip("/"))
         # Mimic CRISPResso output folder naming conventions to get correct path
         if r1m and r2m:
-            crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs","Run_a", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs","Run_b", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
-            crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs","Run_a", f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs","Run_b", f"CRISPResso_on_{r1m.group(1)}")
         else:   
             raise ValueError("Could not parse fastq file names for output folder naming.")
     else:
         # If output_folder not provided, create own
         if r1m and r2m:
             parent_folder = os.path.join(os.getcwd(), f"TwinPE_8cat_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs","Run_a", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs","Run_b", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
             parent_folder = os.path.join(os.getcwd(), f"TwinPE_8cat_on_{r1m.group(1)}")
-            crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs","Run_a", f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs","Run_b", f"CRISPResso_on_{r1m.group(1)}")
         else:
             raise ValueError("Could not parse fastq file names for output folder naming.")
+        
     twinpe_8cat_results_folder = os.path.join(parent_folder, "TwinPE_8cat_results")
-    return parent_folder, crispresso_output_folder, twinpe_8cat_results_folder
+
+    return parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder
 
 
-def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info, output_root):
+def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info, output_root, run_label):
     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
-        first_spacer = args.peg_spacers[0]
-        second_spacer = args.peg_spacers[1][:len(args.peg_spacers[1])-spacer_info['spacer_b_num_bases_removed']]
+        if run_label == "a":
+            first_spacer = args.peg_spacers[0]
+            second_spacer = args.peg_spacers[1][:len(args.peg_spacers[1])-spacer_info['spacer_b_num_bases_removed']]
+        else:
+            first_spacer = args.peg_spacers[0][:len(args.peg_spacers[0])-spacer_info['spacer_a_num_bases_removed']]
+            second_spacer = args.peg_spacers[1]
     else:
-        first_spacer = args.peg_spacers[1]
-        second_spacer = args.peg_spacers[0][:len(args.peg_spacers[0])-spacer_info['spacer_a_num_bases_removed']]
+        if run_label == "a":
+            first_spacer = args.peg_spacers[1]
+            second_spacer = args.peg_spacers[0][:len(args.peg_spacers[0])-spacer_info['spacer_a_num_bases_removed']]
+        else:
+            first_spacer = args.peg_spacers[1][:len(args.peg_spacers[1])-spacer_info['spacer_b_num_bases_removed']]
+            second_spacer = args.peg_spacers[0]
     # May want to wrap in all CRISPResso parameters somehow or remove some of the hardcoded ones below
     cmd = [
         "CRISPResso",
@@ -339,7 +381,7 @@ def analyze_single_crispresso_output(
         ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
         produce_png=args.produce_png
     )
-    # CATEGORIES = ["Perfect_PE", "PE_Indel", "Left_Flap", "Right_Flap", "Imperfect_PE", "Imperfect_WT", "WT_Indel", "WT", "Uncategorized"]
+
     CATEGORY_COLORS = {
         "Perfect PE":  "#1f77b4",    # blue
         "PE Indel": "#9467bd",       # purple
@@ -484,7 +526,6 @@ def analyze_single_crispresso_output(
         produce_png=args.produce_png, 
         category_colors=CATEGORY_COLORS
     )
-
 
 
     # plot_nonprogrammed_edit_counts(
