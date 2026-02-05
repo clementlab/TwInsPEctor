@@ -18,13 +18,25 @@ from matplotlib import colors as colors_mpl
 
 
 # TODO:
-# Add recoding mode (substitutions-only). Default mode is replacement (deletion + insertion). What about deletion-only and insertion-only modes?
-# Generate plots for both compound versions del/ins and ins/del (b1.1 and b1.2).
+# Add recoding mode.
+# Add dual compound reference functionality.
 # Make sure empty allele tables are not generated.
-# Add support to only require full ref seqs through end of spacers vs matching prefix/suffix. 
+# Add support for mismatched prefix/suffix. 
 # Add multi-sample support.
-# Does a deletion within the WT-TwinPE edited region make sense?
-# Clean up code, add helper functions and docstrings where needed.
+# Clean up code, add helper functions and docstrings.
+
+
+CATEGORY_COLORS = {
+    "Perfect PE":  "#1f77b4", 
+    "PE Indel": "#9467bd", 
+    "Left Flap": "#ff7f0e", 
+    "Right Flap": "#2ca02c", 
+    "Imperfect PE": "#d62728", 
+    "Imperfect WT": "#e377c2", 
+    "WT Indel":   "#bcbd22", 
+    "WT": "#8c564b", 
+    "Uncategorized": "#7f7f7f"
+}
 
 
 def main():
@@ -42,6 +54,7 @@ def main():
     os.makedirs(crispresso_run_b_folder, exist_ok=True)
 
     spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1])
+    # TODO: move to correct twinpe_8cat_results_folder a/b
     comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = build_compound_reference_alignments(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1], spacer_info, twinpe_8cat_results_folder)
     # compound_ref_seq = build_compound_reference(args.wt_seq, args.twin_seq)
 
@@ -54,7 +67,7 @@ def main():
     subprocess.run(crispresso_cmd_b, check=True)
 
     print("Analyzing CRISPResso output...")
-    analyze_single_crispresso_output(twinpe_8cat_a_folder, crispresso_output_folder_a, args, comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, spacer_info)
+    analyze_visualize_sample(twinpe_8cat_a_folder, twinpe_8cat_b_folder, crispresso_output_folder_a, crispresso_output_folder_b, args, comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b, spacer_info)
     print("Finished TwinPE analysis!")
 
     sys.exit(0)
@@ -355,76 +368,106 @@ def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info,
     return cmd
 
 
-def analyze_single_crispresso_output(
-        twinpe_8cat_results_folder, 
-        crispresso_output_folder, 
+def analyze_visualize_sample(
+        twinpe_8cat_a_folder, 
+        twinpe_8cat_b_folder, 
+        crispresso_output_folder_a, 
+        crispresso_output_folder_b, 
         args, 
-        comp_ref_seq, 
-        wt_aln_seq, 
-        twin_aln_seq, 
+        comp_ref_seq_a, 
+        wt_aln_seq_a, 
+        twin_aln_seq_a, 
+        comp_ref_seq_b, 
+        wt_aln_seq_b, 
+        twin_aln_seq_b, 
         spacer_info,
     ):
     """
     Runs classification and plotting functions for a single sample.
     """
-
-    # Run classification and get all results as a dictionary
-    results = classify_crispresso_output(
-        crispresso_output_folder=crispresso_output_folder,
-        twinpe_8cat_results_folder=twinpe_8cat_results_folder,
-        comp_ref_seq=comp_ref_seq,
+    results_a = analyze_single_crispresso_output(
+        crispresso_output_folder=crispresso_output_folder_a,
+        twinpe_8cat_results_folder=twinpe_8cat_a_folder,
+        comp_ref_seq=comp_ref_seq_a,
         twin_seq=args.twin_seq,
-        twin_aln_seq=twin_aln_seq,
+        twin_aln_seq=twin_aln_seq_a,
         wt_seq=args.wt_seq,
-        wt_aln_seq=wt_aln_seq,
+        wt_aln_seq=wt_aln_seq_a,
         num_changes_to_check=args.num_changes_to_check,
         ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
         produce_png=args.produce_png
     )
 
-    CATEGORY_COLORS = {
-        "Perfect PE":  "#1f77b4",    # blue
-        "PE Indel": "#9467bd",       # purple
-        "Left Flap": "#ff7f0e",      # orange
-        "Right Flap": "#2ca02c",     # green
-        "Imperfect PE": "#d62728",   # red
-        "Imperfect WT": "#e377c2",   # pink
-        "WT Indel":   "#bcbd22",     # olive
-        "WT": "#8c564b",             # brown
-        "Uncategorized": "#7f7f7f"   # gray
-    }
-
-    # repetitive output
-    # summary_output_file = os.path.join(twinpe_8cat_results_folder, "Summary.txt")
-
-    # with open(summary_output_file, "w") as fout:
-    #     fout.write("Folder\tWT\tWT_indels\tLeft_flap\tRight_flap\tPerfect_PE\tImperfect_PE\tPE_indels\n")
-    #     fout.write(
-    #         crispresso_output_folder + "\t" + "\t".join(
-    #             str(results["folder_category_counts"][x])
-    #             for x in ["WT", "WT Indel", "Left Flap", "Right Flap", "Perfect PE", "Imperfect PE", "PE Indel"]
-    #         ) + "\n"
-    #     )
-
+    results_b = analyze_single_crispresso_output(
+        crispresso_output_folder=crispresso_output_folder_b,
+        twinpe_8cat_results_folder=twinpe_8cat_b_folder,
+        comp_ref_seq=comp_ref_seq_b,
+        twin_seq=args.twin_seq,
+        twin_aln_seq=twin_aln_seq_b,
+        wt_seq=args.wt_seq,
+        wt_aln_seq=wt_aln_seq_b,
+        num_changes_to_check=args.num_changes_to_check,
+        ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
+        produce_png=args.produce_png
+    )
 
     setBarMatplotlibDefaults()
+    
+    for results, crispresso_output_folder, twinpe_8cat_results_folder in [(results_a, crispresso_output_folder_a, twinpe_8cat_a_folder), (results_b, crispresso_output_folder_b, twinpe_8cat_b_folder)]:
+        plot_summary_barplots(
+            results, 
+            crispresso_output_folder, 
+            twinpe_8cat_results_folder, 
+            args, 
+            spacer_info, 
+            category_colors=CATEGORY_COLORS
+        )
+
+        plot_per_base_pos_barplots(
+            results, 
+            twinpe_8cat_results_folder, 
+            args, 
+            category_colors=CATEGORY_COLORS
+        )
+
+    setAlleleMatplotlibDefaults()
+
+    for results, twinpe_8cat_results_folder in [(results_a, twinpe_8cat_a_folder)]: # , (results_b, twinpe_8cat_b_folder)]: # Need to make many changes for this to work
+        # TODO: some of these inputs can be passed directly instead through the results output
+        plot_categorical_allele_tables(
+            results["min_frequency"],
+            results["max_n_rows"],
+            results["df_alleles"],
+            results["wt_seq"],
+            results["wt_aln_seq"],
+            results["twin_aln_seq"],
+            results["pegRNA_cut_points"],
+            results["pegRNA_plot_cut_points"],
+            results["pegRNA_intervals"],
+            results["pegRNA_mismatches"],
+            results["pegRNA_names"],
+            spacer_info=spacer_info,
+            fig_root=twinpe_8cat_results_folder,
+            produce_png=args.produce_png,
+            plot_full_reads=args.plot_full_reads
+        )
 
 
+def plot_summary_barplots(results, crispresso_output_folder_a, twinpe_8cat_results_folder, args, spacer_info, category_colors=CATEGORY_COLORS):
+    
     plot_reads_input_summary_barplot(
-        crispresso_output_folder,
+        crispresso_output_folder_a,
         fig_root=twinpe_8cat_results_folder,
         produce_png=args.produce_png
     )
 
-
     plot_category_stacked_summary_barplot(
-        crispresso_output_folder,
+        crispresso_output_folder_a,
         results["folder_category_counts"], 
         fig_root=twinpe_8cat_results_folder, 
         produce_png=args.produce_png, 
         category_colors=CATEGORY_COLORS
     )
-
 
     # plot_stacked_summary_barplot(
     #     results["folder_category_counts"], 
@@ -432,15 +475,16 @@ def analyze_single_crispresso_output(
     #     produce_png=args.produce_png
     # )
 
-
     plot_category_summary_barplot(
         results["folder_category_counts"], 
         fig_root=twinpe_8cat_results_folder, 
         produce_png=args.produce_png, 
         category_colors=CATEGORY_COLORS
     )
+    
 
-
+def plot_per_base_pos_barplots(results, twinpe_8cat_results_folder, args, category_colors=CATEGORY_COLORS):
+    
     plot_successful_twin_edit_counts_by_category(
         results["bp_changes_arr"],
         results["edit_counts"],
@@ -460,7 +504,6 @@ def analyze_single_crispresso_output(
         category_colors=CATEGORY_COLORS
     )
 
-
     plot_total_read_counts(
         results["bp_changes_arr"],
         results["total_counts"],
@@ -478,7 +521,6 @@ def analyze_single_crispresso_output(
         category_colors=CATEGORY_COLORS 
     )
 
-
     plot_edit_read_counts(
         results["bp_changes_arr"],
         results["edit_counts"],
@@ -495,7 +537,6 @@ def analyze_single_crispresso_output(
         category_colors=CATEGORY_COLORS
     )
 
-
     plot_edit_read_counts_with_indels(
         results["edit_counts"],
         results["bp_changes_arr"],
@@ -510,7 +551,6 @@ def analyze_single_crispresso_output(
         produce_png=args.produce_png, 
         category_colors=CATEGORY_COLORS
     )
-
 
     plot_editing_summary(
         results["full_deletion_counts"], 
@@ -527,7 +567,6 @@ def analyze_single_crispresso_output(
         category_colors=CATEGORY_COLORS
     )
 
-
     # plot_nonprogrammed_edit_counts(
     #     results["full_deletion_counts"],
     #     results["full_insertion_counts"],
@@ -541,186 +580,12 @@ def analyze_single_crispresso_output(
     # )
 
 
-    setAlleleMatplotlibDefaults()
-
-
-    plot_categorical_allele_tables(
-        results["min_frequency"],
-        results["max_n_rows"],
-        results["df_alleles"],
-        results["wt_seq"],
-        results["wt_aln_seq"],
-        results["twin_aln_seq"],
-        results["pegRNA_cut_points"],
-        results["pegRNA_plot_cut_points"],
-        results["pegRNA_intervals"],
-        results["pegRNA_mismatches"],
-        results["pegRNA_names"],
-        spacer_info=spacer_info,
-        fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png,
-        plot_full_reads=args.plot_full_reads
-    )
-
-
-def get_refpos_values(ref_aln_seq, read_aln_seq):
-    """
-    Given a reference alignment this returns a dictionary such that refpos_dict[ind] is the value of the read at the position corresponding to the ind'th base in the reference
-    Any additional bases in the read (gaps in the ref) are assigned to the first position of the ref (i.e. refpos_dict[0])
-    For other additional bases in the ref (gaps in the read), the value is appended to the last position of the ref that had a non-gap base (to the left)
-    For example:
-    ref_seq =  '--A-TGC-'
-    read_seq = 'GGAGTCGA'
-    get_refpos_values(ref_seq, read_seq)
-    {0: 'GGAG', 1: 'T', 2: 'C', 3: 'GA'}
-    Args:
-    - ref_aln_seq: str, reference alignment sequence
-    - read_aln_seq: str, read alignment sequence
-    Returns:
-    - refpos_dict: dict, dictionary such that refpos_dict[ind] is the value of the read at the position corresponding to the ind'th base in the reference
-    """
-    refpos_dict = defaultdict(str)
-
-    # First, if there are insertions in read, add those to the first position in ref
-    if ref_aln_seq[0] == "-":
-        aln_index = 0
-        read_start_bases = ""
-        while aln_index < len(ref_aln_seq) and ref_aln_seq[aln_index] == "-":
-            read_start_bases += read_aln_seq[aln_index]
-            aln_index += 1
-        refpos_dict[0] = read_start_bases
-        ref_aln_seq = ref_aln_seq[aln_index:]
-        read_aln_seq = read_aln_seq[aln_index:]
-
-    ref_pos = 0
-    last_nongap_ref_pos = 0
-    for ind in range(len(ref_aln_seq)):
-        ref_base = ref_aln_seq[ind]
-        read_base = read_aln_seq[ind]
-        if ref_base == "-":
-            refpos_dict[last_nongap_ref_pos] += read_base
-        else:
-            refpos_dict[ref_pos] += read_base
-            last_nongap_ref_pos = ref_pos
-            ref_pos += 1
-    return refpos_dict
-
-
-def classify_crispresso_output(
-    crispresso_output_folder,
-    twinpe_8cat_results_folder,
-    comp_ref_seq=None,
-    twin_seq=None,
-    twin_aln_seq=None,
-    wt_seq=None,
-    wt_aln_seq=None,
-    # comp_ref_name=None,
-    num_changes_to_check=2,
-    ignore_extraspacer_deletions=False, 
-    # num_changes_to_check=1,
-    # consider_changes_outside_of_guide=False,
-    produce_png=False,
-):
-    """ 
-    
-    """
-
-    # Load and validate CRISPResso2 output
-    crispresso_info_file = os.path.join(crispresso_output_folder, "CRISPResso2_info.json")
-    if not os.path.exists(crispresso_info_file):
-        sys.exit(f"CRISPResso2 output missing: {crispresso_info_file}")
-
-    try:
-        crispresso2_info = CRISPRessoShared.load_crispresso_info(crispresso_output_folder)
-    except Exception as e:
-        sys.exit(f"Could not open CRISPResso2 info file: {e}")
-
-    ref_names = crispresso2_info["results"].get("ref_names", [])
-    if len(ref_names) != 1 or ref_names[0] != "Compound":
-        sys.exit(f"CRISPResso2 was not run against the 'Compound' reference only - did CRISPResso2 run complete successfully?\nFound reference: {ref_names}")
-
-    # print(f"Processing {crispresso_output_folder}...")
-    # crispresso2_info = CRISPRessoShared.load_crispresso_info(crispresso_output_folder)
-
-    # redundant checks
-    # if "Compound" not in crispresso2_info['results']['refs']:
-    #     raise Exception("Reference sequence for reference 'Compound' not found - did CRISPResso2 run complete successfully?")
-
-    # if not twin_seq:
-    #     raise Exception('TwinPE reference sequence not found - was a reference sequence provided using -t or --twin_seq?')
-
-    # if not wt_seq:
-    #     raise Exception("WT reference sequence not found - was a reference sequence provided using -w or --wildtype_seq?")
-
-    output_root = twinpe_8cat_results_folder
-    ref = crispresso2_info["results"]["refs"]["Compound"]
-    # comp_ref_seq = ref["sequence"]
-    pegRNA_cut_points = ref["sgRNA_cut_points"]
-    pegRNA_plot_cut_points = ref["sgRNA_plot_cut_points"]
-    pegRNA_intervals = ref["sgRNA_intervals"]
-    pegRNA_mismatches = ref["sgRNA_mismatches"]
-    pegRNA_names = ref["sgRNA_names"]
-
-    # if consider_changes_outside_of_guide:
-    #     if not crispresso2_info["running_info"]["args"].write_detailed_allele_table:
-    #         raise Exception(
-    #             "To use parameter --consider_changes_outside_of_guide, CRISPResso run must be run with the parameter --write_detailed_allele_table"
-    #         )
-
-    # Not needed if using build_compound_reference_alignments function
-    # # Find alignment of WT and TwinPE to Compound reference using CRISPResso2Align
-    # # Create alignments using the same scoring parameters CRISPResso2
-    # # used for read alignments to ensure consistent gap behavior.
-    # aln_gap_incentive = crispresso2_info['results']['refs']['Compound']['gap_incentive']
-    # aln_gap_open_arg = crispresso2_info['running_info']['args'].needleman_wunsch_gap_open
-    # aln_gap_extend_arg = crispresso2_info['running_info']['args'].needleman_wunsch_gap_extend
-
-    # aln_matrix_loc = crispresso2_info['running_info']['args'].needleman_wunsch_aln_matrix_loc
-    # if aln_matrix_loc == 'EDNAFULL':
-    #     aln_matrix = CRISPResso2Align.make_matrix()
-    # else:
-    #     if not os.path.exists(aln_matrix_loc):
-    #         raise Exception('Alignment matrix file not found at ' + aln_matrix_loc)
-    #     aln_matrix = CRISPResso2Align.read_matrix(aln_matrix_loc)
-
-    # # Align TwinPE to Compound Ref Sequence
-    # twin_aln_seq, comp_aln_seq_pe, aln_score = CRISPResso2Align.global_align(
-    #     twin_seq, 
-    #     comp_ref_seq, 
-    #     matrix=aln_matrix,
-    #     gap_incentive=aln_gap_incentive,
-    #     gap_open=aln_gap_open_arg,
-    #     gap_extend=aln_gap_extend_arg
-    # )
-
-    # # Align WT to Compound Ref Sequence
-    # wt_aln_seq, comp_aln_seq_wt, aln_score = CRISPResso2Align.global_align(
-    #     wt_seq, 
-    #     comp_ref_seq, 
-    #     matrix=aln_matrix,
-    #     gap_incentive=aln_gap_incentive,
-    #     gap_open=aln_gap_open_arg,
-    #     gap_extend=aln_gap_extend_arg
-    # )
-
-    # Redundant checks if using build_compound_reference_alignments
-    # # Alignment debugging check - may need to change bp_changes_arr range if alignments differ (use longest?)
-    # if len(comp_aln_seq_pe) != len(comp_aln_seq_wt):
-    #     raise Exception('Compound ref alignments to TwinPE and WT have different lengths!')
-
-    # May want to add this option to args
-    # Determine which reference indices to analyze: either the full reference or
-    # just the CRISPResso quantification window.
-    # if consider_changes_outside_of_guide:
-    #     ref_positions_to_include = [x for x in range(len(ref_seq))]
-    # else:
-    #     ref_positions_to_include = crispresso2_info["results"]["refs"][ref_name][
-    #         "include_idxs"
-    #     ]
-
-    # Determine deletion and insertion regions in WT and TwinPE refs - these are the base changes
+def get_ref_base_changes(comp_ref_seq, wt_aln_seq, twin_aln_seq):
     bp_changes_arr = []
-    del_start = del_end = ins_start = ins_end = None
+    del_start = None
+    del_end = None
+    ins_start = None
+    ins_end = None
     for idx in range(len(comp_ref_seq)):
         wt_base = wt_aln_seq[idx]
         twin_base = twin_aln_seq[idx]
@@ -734,14 +599,145 @@ def classify_crispresso_output(
             if ins_start is None:
                 ins_start = idx
             ins_end = idx
-    # del_region_coords = (del_start, del_end)
-    # ins_region_coords = (ins_start, ins_end)
 
-    # Debugging checks
+    # Debug check
     del_region_len = del_end - del_start + 1
     ins_region_len = ins_end - ins_start + 1
     if len(bp_changes_arr) != del_region_len + ins_region_len:
-        raise Exception('Length of bp_changes_arr does not equal sum of del and ins region lengths.')
+        raise Exception('Number of total base changes does not equal sum of deletions and insertions.')
+    
+    return bp_changes_arr, del_start, del_end, ins_start, ins_end, ins_region_len
+
+
+def get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start, ins_end):
+    match_arr = []
+    # for ind, (comp_ind, wt_base, twin_base) in enumerate(bp_changes_arr):
+    for (comp_ind, wt_base, twin_base) in bp_changes_arr:
+        read_base = read_map.get(comp_ind, "")
+        if read_base == wt_base:
+            match_arr.append("W") # matches WT base
+        elif read_base == twin_base:
+            match_arr.append("T") # matches TwinPE base
+        # this will never trigger bc every position in bp_changes_arr has a '-' in either wt or twin
+        elif read_base == "-":
+            match_arr.append("D") # non-programmed deletion
+        elif len(read_base) > 1:
+            match_arr.append("I") # non-programmed insertion
+        elif read_base in ["A", "C", "G", "T"]:
+            match_arr.append("S") # non-programmed substitution
+        else:
+            match_arr.append("N") # ambiguous base
+        # match_arr_to_comp_base_index[ind] = comp_ind
+
+    if del_start < ins_start:
+        # del_match_arr = match_arr[:del_end-del_start+1]
+        ins_match_arr = match_arr[del_end-del_start+1:]
+    else:
+        # del_match_arr = match_arr[ins_end-ins_start+1:]
+        ins_match_arr = match_arr[:ins_end-ins_start+1]
+
+    return match_arr, ins_match_arr
+
+
+def indel_checking(all_insertion_left_positions, all_deletion_positions, del_start, del_end, ins_start, ins_end, ignore_extraspacer_deletions, pegRNA_intervals):
+    # Updated Indel checking to include flag 
+    has_any_ins_byproduct = False
+    has_del_in_spacer_window = False
+    has_any_del_byproduct = False
+
+    # Check for insertions anywhere in read
+    if all_insertion_left_positions != "[]":
+        has_any_ins_byproduct = True
+    else:
+        if del_start < ins_start:
+            edit_range = range(del_start, ins_end + 1)
+        else:
+            edit_range = range(ins_start, del_end + 1)
+        all_del_pos = [int(x) for x in all_deletion_positions.strip("[]").split(",") if x.strip().isdigit()]
+        # Ignore deletions beyond spacers if flagged (spacer_info['spacer_a_num_bases_removed'])
+        if ignore_extraspacer_deletions:
+            for del_ind in all_del_pos:
+                if del_ind >= pegRNA_intervals[0][0] and del_ind <= pegRNA_intervals[1][1] and del_ind not in edit_range:  # allele table stores exact position of '-' for deletions. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
+                    has_del_in_spacer_window = True
+                    break
+        # Check for deletions anywhere outside of the edit region if not flagged (del_ind to comp_ref index mapping not necessary)
+        else:
+            for del_ind in all_del_pos:
+                if del_ind not in edit_range:
+                    has_any_del_byproduct = True
+                    break
+
+    # Set has_indel based on flag
+    if ignore_extraspacer_deletions:
+        has_indel = has_any_ins_byproduct or has_del_in_spacer_window
+    else:
+        has_indel = has_any_ins_byproduct or has_any_del_byproduct
+
+    return has_indel
+
+
+def analyze_single_crispresso_output(
+    crispresso_output_folder, 
+    twinpe_8cat_results_folder, 
+    comp_ref_seq=None, 
+    twin_seq=None, 
+    twin_aln_seq=None, 
+    wt_seq=None, 
+    wt_aln_seq=None, 
+    # comp_ref_name=None, 
+    num_changes_to_check=2, 
+    ignore_extraspacer_deletions=False, 
+    # num_changes_to_check=1, 
+    # consider_changes_outside_of_guide=False, 
+    produce_png=False
+):
+    """ 
+    
+    """
+
+    # Load and validate CRISPResso2 outputs
+    crispresso_info_file = os.path.join(crispresso_output_folder, "CRISPResso2_info.json")
+    if not os.path.exists(crispresso_info_file):
+        sys.exit(f"CRISPResso2 output missing: {crispresso_info_file}")
+
+    try:
+        crispresso2_info = CRISPRessoShared.load_crispresso_info(crispresso_output_folder)
+    except Exception as e:
+        sys.exit(f"Could not open CRISPResso2 info file: {e}")
+
+    ref_names = crispresso2_info["results"].get("ref_names", [])
+    if len(ref_names) != 1 or ref_names[0] != "Compound":
+        sys.exit(f"CRISPResso2 was not run against the 'Compound' reference only - did CRISPResso2 run complete successfully?\nFound reference: {ref_names}")
+
+    output_root = twinpe_8cat_results_folder
+    ref = crispresso2_info["results"]["refs"]["Compound"]
+    pegRNA_cut_points = ref["sgRNA_cut_points"]
+    pegRNA_plot_cut_points = ref["sgRNA_plot_cut_points"]
+    pegRNA_intervals = ref["sgRNA_intervals"]
+    pegRNA_mismatches = ref["sgRNA_mismatches"]
+    pegRNA_names = ref["sgRNA_names"]
+
+    # if consider_changes_outside_of_guide:
+    #     if not crispresso2_info["running_info"]["args"].write_detailed_allele_table:
+    #         raise Exception(
+    #             "To use parameter --consider_changes_outside_of_guide, CRISPResso run must be run with the parameter --write_detailed_allele_table"
+    #         )
+
+    # May want to add this option to args
+    # Determine which reference indices to analyze: either the full reference or
+    # just the CRISPResso quantification window.
+    # if consider_changes_outside_of_guide:
+    #     ref_positions_to_include = [x for x in range(len(ref_seq))]
+    # else:
+    #     ref_positions_to_include = crispresso2_info["results"]["refs"][ref_name][
+    #         "include_idxs"
+    #     ]
+
+    # Get insertion/deletion regions and base changes
+    bp_changes_arr, del_start, del_end, ins_start, ins_end, ins_region_len = get_ref_base_changes(comp_ref_seq, wt_aln_seq, twin_aln_seq)
+
+    # del_region_coords = (del_start, del_end)
+    # ins_region_coords = (ins_start, ins_end)
 
     # Map Compound ref bases to WT and TwinPE ref bases
     # wt_map = get_refpos_values(comp_ref_seq, wt_aln_seq)
@@ -771,10 +767,11 @@ def classify_crispresso_output(
 
     # Only plot ins region
     edit_counts = [0] * ins_region_len
-    deletion_counts = [0] * ins_region_len
+    deletion_counts = [0] * ins_region_len # check if fix needed
     insertion_counts = [0] * ins_region_len
     substitution_counts = [0] * ins_region_len
     perfect_T_count = 0
+    
     # Plot full ins del region
     full_edit_counts = [0] * len(bp_changes_arr)
     full_deletion_counts = [0] * len(bp_changes_arr)
@@ -783,8 +780,6 @@ def classify_crispresso_output(
     full_edit_counts_with_indels = [0] * len(bp_changes_arr)
     full_edit_counts_no_indels = [0] * len(bp_changes_arr)
     full_perfect_T_count = 0
-
-    
 
     total_alleles = 0
     total_alleles_reads = 0
@@ -817,8 +812,8 @@ def classify_crispresso_output(
     cat_uncategorized_count = 0
     cat_uncategorized_count_arr = [0] * ins_region_len
 
-    has_indel_in_match_arr_count = 0
-    has_any_indel_byproduct_count = 0
+    # has_indel_in_match_arr_count = 0
+    # has_any_indel_byproduct_count = 0
 
     # iterate all alleles in input allele table
     for idx, allele in df_alleles.iterrows():
@@ -833,97 +828,23 @@ def classify_crispresso_output(
 
         # Map this alleles match_arr index to ref_seq index
         # match_arr_to_comp_base_index = {}
-        # Build an array for both the deletion and inserted regions (bp_changes_arr)
-        match_arr = []
-        # for ind, (comp_ind, wt_base, twin_base) in enumerate(bp_changes_arr):
-        for (comp_ind, wt_base, twin_base) in bp_changes_arr:
-            read_base = read_map.get(comp_ind, "")
-            if read_base == wt_base:
-                match_arr.append("W") # matches WT base
-            elif read_base == twin_base:
-                match_arr.append("T") # matches TwinPE base
-            # this will never trigger bc every position in bp_changes_arr has a '-' in either wt or twin
-            elif read_base == "-":
-                match_arr.append("D") # non-programmed deletion
-            elif len(read_base) > 1:
-                match_arr.append("I") # non-programmed insertion
-            elif read_base in ["A", "C", "G", "T"]:
-                match_arr.append("S") # non-programmed substitution
-            else:
-                match_arr.append("N") # ambiguous base
-            # match_arr_to_comp_base_index[ind] = comp_ind
 
-        # Array for only the sequence that is deleted by TwinPE
-        del_match_arr = match_arr[:del_end-del_start+1]
-        # Array for only the sequence that is inserted by TwinPE
-        ins_match_arr = match_arr[del_end-del_start+1:]
+        # Determine reads base matching for insertion/deletion region
+        match_arr, ins_match_arr = get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start, ins_end)
 
-        #### check match_arr for indels - necssary or repetitive if checking allele table also?
-        has_indel_in_match_arr = any(m in ["I", "D"] for m in match_arr)
-        if has_indel_in_match_arr:
-            has_indel_in_match_arr_count += 1
+        # check match_arr for indels - repetitive if checking allele table
+        # has_indel_in_match_arr = any(m in ["I", "D"] for m in match_arr)
+        # if has_indel_in_match_arr:
+        #     has_indel_in_match_arr_count += 1
 
-        #### Old indel checking flag
-        # # Check ingores deletions beyond spacers - solves issue when Fastq file contains truncated reads (i.e. WT reads being misclassified as WT_Indel due to interpreted deletion at end of read)
-        # if intraspacers_only:
-        #     has_indel_in_spacer_window = False
-        #     if allele.all_insertion_left_positions != "[]":
-        #         all_ins_pos = [int(x) for x in allele.all_insertion_left_positions.strip("[]").split(",") if x.strip().isdigit()]
-        #         for ins_ind in all_ins_pos:
-        #             if ins_ind >= pegRNA_intervals[0][0]-1 and ins_ind < pegRNA_intervals[1][1]:  # pos-1 (window start) and < (window end) due to left pos being stored in allele table insertion list. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
-        #                 has_indel_in_spacer_window = True
-        #                 break
-        #     else:
-        #         edit_range = range(del_start, ins_end + 1)
-        #         all_del_pos = [int(x) for x in allele.all_deletion_positions.strip("[]").split(",") if x.strip().isdigit()]
-        #         for del_ind in all_del_pos:
-        #             if del_ind >= pegRNA_intervals[0][0] and del_ind <= pegRNA_intervals[1][1] and del_ind not in edit_range:  # allele table stores exact position of '-' for deletions. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
-        #                 has_indel_in_spacer_window = True
-        #                 break
-        #     has_indel = has_indel_in_spacer_window
-        
-        # Updated Indel checking to include flag 
-        has_any_ins_byproduct = False
-        has_del_in_spacer_window = False
-        has_any_del_byproduct = False
-        # Check for insertions anywhere in read
-        if allele.all_insertion_left_positions != "[]":
-            has_any_ins_byproduct = True
-        else:
-            edit_range = range(del_start, ins_end + 1)
-            all_del_pos = [int(x) for x in allele.all_deletion_positions.strip("[]").split(",") if x.strip().isdigit()]
-            # Ignore deletions beyond spacers if flagged (spacer_info['spacer_a_num_bases_removed'])
-            if ignore_extraspacer_deletions:
-                for del_ind in all_del_pos:
-                    if del_ind >= pegRNA_intervals[0][0] and del_ind <= pegRNA_intervals[1][1] and del_ind not in edit_range:  # allele table stores exact position of '-' for deletions. Uses ungapped ref coords which is same coord system as pegRNA_intervals.
-                        has_del_in_spacer_window = True
-                        break
-            # Check for deletions anywhere outside of the edit region if not flagged (del_ind to comp_ref index mapping not necessary)
-            else:
-                for del_ind in all_del_pos:
-                    if del_ind not in edit_range:
-                        has_any_del_byproduct = True
-                        break
+        has_indel = indel_checking(allele.all_insertion_left_positions, allele.all_deletion_positions, del_start, del_end, ins_start, ins_end, ignore_extraspacer_deletions, pegRNA_intervals)
 
-        # Set has_indel based on flag
-        has_any_indel_byproduct = False
-        if ignore_extraspacer_deletions:
-            if has_any_ins_byproduct or has_del_in_spacer_window:
-                has_any_indel_byproduct = True
-        else:
-            if has_any_ins_byproduct or has_any_del_byproduct:
-                has_any_indel_byproduct = True
-
-        if has_any_indel_byproduct:
-            has_any_indel_byproduct_count += 1
-        has_indel = has_any_indel_byproduct
-        
-        # has_indel = False
-        # if has_any_indel_byproduct or has_indel_in_match_arr:
+        # TODO: Unused - use for indel tri-barplot?
         if has_indel:
             total_alleles_deletions_reads += allele['#Reads']
 
         match_arr_str = "\t".join(match_arr) + "\t" + str(has_indel)
+
         if match_arr_str not in allele_counts:
             allele_counts[match_arr_str] = 0
         allele_counts[match_arr_str] += allele['#Reads']
@@ -1140,8 +1061,6 @@ def classify_crispresso_output(
                 fout.write(f"{row['Aligned_Sequence']}\n")
                 fout.write(f"{row['Reference_Sequence']}\n")
             fout.write("\n")
-    #########################
-
 
     imperfect_from_left_all_edit_counts = [x-perfect_T_count for x in from_left_all_edit_counts] # these are reads that start with a twin-edited, but are not completely twin-edited. Note that from_left_all_edit_counts includes perfect matches
     imperfect_from_right_all_edit_counts = [x-perfect_T_count for x in from_right_all_edit_counts]
@@ -1244,6 +1163,11 @@ def classify_crispresso_output(
         "args"
     ].max_rows_alleles_around_cut_to_plot
 
+    df_alleles.to_csv(
+        os.path.join(output_root, "c7.detailed_allele_table_with_categories.csv"), 
+                     index=False
+    )
+
     return {
         "folder_category_counts": folder_category_counts,
         "df_alleles": df_alleles,
@@ -1288,6 +1212,10 @@ def classify_crispresso_output(
         "del_start": del_start,
         "del_end": del_end
     }
+
+
+def collapse_allele_categories(df_alleles_a, df_alleles_b):
+    pass
 
 
 def setBarMatplotlibDefaults():
@@ -1898,6 +1826,49 @@ def plot_nonprogrammed_edit_counts(full_deletion_counts, full_insertion_counts, 
     plt.savefig(fig_root + "/a9.Nonprogrammed_edits.pdf", bbox_inches='tight')
     if produce_png:
         plt.savefig(fig_root + "/a9.Nonprogrammed_edits.png", bbox_inches='tight')
+
+
+def get_refpos_values(ref_aln_seq, read_aln_seq):
+    """
+    Given a reference alignment this returns a dictionary such that refpos_dict[ind] is the value of the read at the position corresponding to the ind'th base in the reference
+    Any additional bases in the read (gaps in the ref) are assigned to the first position of the ref (i.e. refpos_dict[0])
+    For other additional bases in the ref (gaps in the read), the value is appended to the last position of the ref that had a non-gap base (to the left)
+    For example:
+    ref_seq =  '--A-TGC-'
+    read_seq = 'GGAGTCGA'
+    get_refpos_values(ref_seq, read_seq)
+    {0: 'GGAG', 1: 'T', 2: 'C', 3: 'GA'}
+    Args:
+    - ref_aln_seq: str, reference alignment sequence
+    - read_aln_seq: str, read alignment sequence
+    Returns:
+    - refpos_dict: dict, dictionary such that refpos_dict[ind] is the value of the read at the position corresponding to the ind'th base in the reference
+    """
+    refpos_dict = defaultdict(str)
+
+    # First, if there are insertions in read, add those to the first position in ref
+    if ref_aln_seq[0] == "-":
+        aln_index = 0
+        read_start_bases = ""
+        while aln_index < len(ref_aln_seq) and ref_aln_seq[aln_index] == "-":
+            read_start_bases += read_aln_seq[aln_index]
+            aln_index += 1
+        refpos_dict[0] = read_start_bases
+        ref_aln_seq = ref_aln_seq[aln_index:]
+        read_aln_seq = read_aln_seq[aln_index:]
+
+    ref_pos = 0
+    last_nongap_ref_pos = 0
+    for ind in range(len(ref_aln_seq)):
+        ref_base = ref_aln_seq[ind]
+        read_base = read_aln_seq[ind]
+        if ref_base == "-":
+            refpos_dict[last_nongap_ref_pos] += read_base
+        else:
+            refpos_dict[ref_pos] += read_base
+            last_nongap_ref_pos = ref_pos
+            ref_pos += 1
+    return refpos_dict
 
 
 def add_sgRNA_to_ax(ax,
