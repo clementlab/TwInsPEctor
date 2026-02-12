@@ -19,11 +19,8 @@ from matplotlib import colors as colors_mpl
 
 # TODO:
 # Add recoding mode.
-# Add dual compound reference functionality.
-# Make sure empty allele tables are not generated.
-# Add support for mismatched prefix/suffix. 
+# Add mismatched prefix/suffix support. 
 # Add multi-sample support.
-# Clean up code, add helper functions and docstrings.
 
 
 CATEGORY_COLORS = {
@@ -45,21 +42,21 @@ def main():
     parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder = resolve_output_folders(args)
     crispresso_run_a_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_a")
     crispresso_run_b_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_b")
-    twinpe_8cat_a_folder = os.path.join(twinpe_8cat_results_folder, "Run_a")
-    twinpe_8cat_b_folder = os.path.join(twinpe_8cat_results_folder, "Run_b")
+    # twinpe_8cat_a_folder = os.path.join(twinpe_8cat_results_folder, "Run_a")
+    # twinpe_8cat_b_folder = os.path.join(twinpe_8cat_results_folder, "Run_b")
 
-    os.makedirs(twinpe_8cat_a_folder, exist_ok=True)
-    os.makedirs(twinpe_8cat_b_folder, exist_ok=True)
+    # os.makedirs(twinpe_8cat_a_folder, exist_ok=True)
+    # os.makedirs(twinpe_8cat_b_folder, exist_ok=True)
+    os.makedirs(twinpe_8cat_results_folder, exist_ok=True)
     os.makedirs(crispresso_run_a_folder, exist_ok=True)
     os.makedirs(crispresso_run_b_folder, exist_ok=True)
 
     spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1])
-    # TODO: move to correct twinpe_8cat_results_folder a/b
     comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = build_compound_reference_alignments(args.wt_seq, args.twin_seq, args.peg_spacers[0], args.peg_spacers[1], spacer_info, twinpe_8cat_results_folder)
     # compound_ref_seq = build_compound_reference(args.wt_seq, args.twin_seq)
 
-    crispresso_cmd_a = build_crispresso_command(args, comp_ref_seq_a, crispresso_run_a_folder, spacer_info, twinpe_8cat_a_folder, run_label="a")
-    crispresso_cmd_b = build_crispresso_command(args, comp_ref_seq_b, crispresso_run_b_folder, spacer_info, twinpe_8cat_b_folder, run_label="b")
+    crispresso_cmd_a = build_crispresso_command(args, comp_ref_seq_a, crispresso_run_a_folder, spacer_info, twinpe_8cat_results_folder, run_label="a")
+    crispresso_cmd_b = build_crispresso_command(args, comp_ref_seq_b, crispresso_run_b_folder, spacer_info, twinpe_8cat_results_folder, run_label="b")
 
     print("Running CRISPResso with command:\n", " ".join(crispresso_cmd_a), "\n")
     subprocess.run(crispresso_cmd_a, check=True)
@@ -67,7 +64,7 @@ def main():
     subprocess.run(crispresso_cmd_b, check=True)
 
     print("Analyzing CRISPResso output...")
-    analyze_visualize_sample(twinpe_8cat_a_folder, twinpe_8cat_b_folder, crispresso_output_folder_a, crispresso_output_folder_b, args, comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b, spacer_info)
+    analyze_visualize_sample(twinpe_8cat_results_folder, crispresso_output_folder_a, crispresso_output_folder_b, args, comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b, spacer_info) # twinpe_8cat_a_folder, twinpe_8cat_b_folder, 
     print("Finished TwinPE analysis!")
 
     sys.exit(0)
@@ -107,7 +104,10 @@ def parse_args():
     parser.add_argument("-f", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
     parser.add_argument("--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
     parser.add_argument("--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
-    # parser.add_argument("-d", "--debug", action="store_true")
+    parser.add_argument("--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles table plot.")
+    parser.add_argument("--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele table plot.")
+    parser.add_argument("--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
+    parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
     args = parser.parse_args()
@@ -324,7 +324,7 @@ def resolve_output_folders(args):
     return parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder
 
 
-def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info, output_root, run_label):
+def build_crispresso_command(args, compound_ref_seq, crispresso_output_folder, spacer_info, twinpe_8cat_output_folder, run_label):
     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
         if run_label == "a":
             first_spacer = args.peg_spacers[0]
@@ -345,23 +345,24 @@ def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info,
         "--fastq_r1", args.fastq_r1,
         "--amplicon_seq", compound_ref_seq,
         "--amplicon_name", "Compound",
-        "--guide_seq", f"{first_spacer},{second_spacer}",
-        "--min_frequency_alleles_around_cut_to_plot", "0.01",
+        "--guide_seq", f"{first_spacer},{second_spacer}", 
+        "--default_min_aln_score", str(args.default_min_aln_score), 
+        "--min_frequency_alleles_around_cut_to_plot", str(args.min_frequency_alleles), 
+        "--max_rows_alleles_around_cut_to_plot", str(args.max_n_rows), 
         "--write_detailed_allele_table",
-        "--no_rerun",
-        # "--debug"
     ]
+
+    cmd.extend(["--output_folder", crispresso_output_folder])
+
     if args.fastq_r2:
         cmd.extend(["--fastq_r2", args.fastq_r2])
-    if args.default_min_aln_score:
-        cmd.extend(["--default_min_aln_score", str(args.default_min_aln_score)])
-    else:
-        cmd.extend(["--default_min_aln_score", "50"])
-
-    cmd.extend(["--output_folder", output_folder])
+    if args.no_rerun:
+        cmd.append("--no_rerun")
+    if args.debug:
+        cmd.append("--debug")
 
     with open(
-        os.path.join(output_root, "c6.crispresso2_command.txt"), "w"
+        os.path.join(twinpe_8cat_output_folder, "c6.crispresso2_command_a.txt" if run_label == "a" else "c7.crispresso2_command_b.txt"), "w"
     ) as fout:
         fout.write(" ".join(cmd) + "\n")
 
@@ -369,8 +370,9 @@ def build_crispresso_command(args, compound_ref_seq, output_folder, spacer_info,
 
 
 def analyze_visualize_sample(
-        twinpe_8cat_a_folder, 
-        twinpe_8cat_b_folder, 
+        twinpe_8cat_results_folder, 
+        # twinpe_8cat_a_folder, 
+        # twinpe_8cat_b_folder, 
         crispresso_output_folder_a, 
         crispresso_output_folder_b, 
         args, 
@@ -385,87 +387,97 @@ def analyze_visualize_sample(
     """
     Runs classification and plotting functions for a single sample.
     """
-    results_a = analyze_single_crispresso_output(
-        crispresso_output_folder=crispresso_output_folder_a,
-        twinpe_8cat_results_folder=twinpe_8cat_a_folder,
-        comp_ref_seq=comp_ref_seq_a,
-        twin_seq=args.twin_seq,
-        twin_aln_seq=twin_aln_seq_a,
-        wt_seq=args.wt_seq,
-        wt_aln_seq=wt_aln_seq_a,
-        num_changes_to_check=args.num_changes_to_check,
-        ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
-        produce_png=args.produce_png
-    )
+    df_alleles_a_results = categorize_alleles(crispresso_output_folder_a, comp_ref_seq_a, twin_aln_seq_a, wt_aln_seq_a, args.num_changes_to_check, args.ignore_extraspacer_deletions)
 
-    results_b = analyze_single_crispresso_output(
-        crispresso_output_folder=crispresso_output_folder_b,
-        twinpe_8cat_results_folder=twinpe_8cat_b_folder,
-        comp_ref_seq=comp_ref_seq_b,
-        twin_seq=args.twin_seq,
-        twin_aln_seq=twin_aln_seq_b,
-        wt_seq=args.wt_seq,
-        wt_aln_seq=wt_aln_seq_b,
-        num_changes_to_check=args.num_changes_to_check,
+    df_alleles_b_results = categorize_alleles(crispresso_output_folder_b, comp_ref_seq_b, twin_aln_seq_b, wt_aln_seq_b, args.num_changes_to_check, args.ignore_extraspacer_deletions)
+
+    df_alleles_final = collapse_allele_categories(df_alleles_a_results["df_alleles"], df_alleles_b_results["df_alleles"])
+
+    results_final = analyze_collapsed_categorized_alleles(
+        df_alleles_final, 
+        # crispresso_output_folder=crispresso_output_folder_a,
+        twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
+        # wt_seq=args.wt_seq,
+        # twin_seq=args.twin_seq,
+        # wt_aln_seq_a=wt_aln_seq_a, 
+        # twin_aln_seq_a=twin_aln_seq_a,
+        # comp_ref_seq_a=comp_ref_seq_a, 
+        # wt_aln_seq_b=wt_aln_seq_b, 
+        # twin_aln_seq_b=twin_aln_seq_b,
+        # comp_ref_seq_b=comp_ref_seq_b, 
+        bp_changes_arr_a=df_alleles_a_results["bp_changes_arr"], 
+        del_start_a=df_alleles_a_results["del_start"], 
+        del_end_a=df_alleles_a_results["del_end"], 
+        ins_start_a=df_alleles_a_results["ins_start"], 
+        ins_end_a=df_alleles_a_results["ins_end"], 
+        ins_region_len_a=df_alleles_a_results["ins_region_len"], 
+        pegRNA_intervals_a=df_alleles_a_results["pegRNA_intervals"], 
+        bp_changes_arr_b=df_alleles_b_results["bp_changes_arr"], 
+        del_start_b=df_alleles_b_results["del_start"], 
+        del_end_b=df_alleles_b_results["del_end"], 
+        ins_start_b=df_alleles_b_results["ins_start"], 
+        ins_end_b=df_alleles_b_results["ins_end"], 
+        ins_region_len_b=df_alleles_b_results["ins_region_len"], 
+        pegRNA_intervals_b=df_alleles_b_results["pegRNA_intervals"], 
+        # num_changes_to_check=args.num_changes_to_check,
         ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, 
-        produce_png=args.produce_png
+        # produce_png=args.produce_png
     )
 
     setBarMatplotlibDefaults()
     
-    for results, crispresso_output_folder, twinpe_8cat_results_folder in [(results_a, crispresso_output_folder_a, twinpe_8cat_a_folder), (results_b, crispresso_output_folder_b, twinpe_8cat_b_folder)]:
-        plot_summary_barplots(
-            results, 
-            crispresso_output_folder, 
-            twinpe_8cat_results_folder, 
-            args, 
-            spacer_info, 
-            category_colors=CATEGORY_COLORS
-        )
+    # for results, crispresso_output_folder, twinpe_8cat_results_folder in [(results_a["folder_category_counts"], crispresso_output_folder_a, twinpe_8cat_a_folder), (results_b["folder_category_counts"], crispresso_output_folder_b, twinpe_8cat_b_folder)]:
+    plot_summary_barplots(
+        results_final["folder_category_counts"],  
+        crispresso_output_folder_a, 
+        twinpe_8cat_results_folder, 
+        args.produce_png
+    )
 
-        plot_per_base_pos_barplots(
-            results, 
-            twinpe_8cat_results_folder, 
-            args, 
-            category_colors=CATEGORY_COLORS
-        )
+    plot_per_base_pos_barplots(
+        results_final, 
+        df_alleles_a_results["ins_start"], 
+        df_alleles_a_results["ins_end"], 
+        df_alleles_a_results["del_start"], 
+        twinpe_8cat_results_folder, 
+        args.produce_png
+    )
 
     setAlleleMatplotlibDefaults()
 
-    for results, twinpe_8cat_results_folder in [(results_a, twinpe_8cat_a_folder)]: # , (results_b, twinpe_8cat_b_folder)]: # Need to make many changes for this to work
-        # TODO: some of these inputs can be passed directly instead through the results output
-        plot_categorical_allele_tables(
-            results["min_frequency"],
-            results["max_n_rows"],
-            results["df_alleles"],
-            results["wt_seq"],
-            results["wt_aln_seq"],
-            results["twin_aln_seq"],
-            results["pegRNA_cut_points"],
-            results["pegRNA_plot_cut_points"],
-            results["pegRNA_intervals"],
-            results["pegRNA_mismatches"],
-            results["pegRNA_names"],
-            spacer_info=spacer_info,
-            fig_root=twinpe_8cat_results_folder,
-            produce_png=args.produce_png,
-            plot_full_reads=args.plot_full_reads
-        )
+    # for results, twinpe_8cat_results_folder in [(results_a, twinpe_8cat_a_folder)]: # , (results_b, twinpe_8cat_b_folder)]: # Need to make many changes for this to work
+    plot_categorical_allele_tables(
+        args.min_frequency_alleles,
+        args.max_n_rows, 
+        df_alleles_final,
+        args.wt_seq,
+        wt_aln_seq_a,
+        twin_aln_seq_a,
+        df_alleles_a_results["pegRNA_cut_points"],
+        df_alleles_a_results["pegRNA_plot_cut_points"],
+        df_alleles_a_results["pegRNA_intervals"],
+        df_alleles_a_results["pegRNA_mismatches"],
+        df_alleles_a_results["pegRNA_names"],
+        spacer_info=spacer_info,
+        fig_root=twinpe_8cat_results_folder,
+        produce_png=args.produce_png,
+        plot_full_reads=args.plot_full_reads
+    )
 
 
-def plot_summary_barplots(results, crispresso_output_folder_a, twinpe_8cat_results_folder, args, spacer_info, category_colors=CATEGORY_COLORS):
+def plot_summary_barplots(folder_category_counts, crispresso_output_folder_a, twinpe_8cat_results_folder, produce_png):
     
     plot_reads_input_summary_barplot(
         crispresso_output_folder_a,
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png
+        produce_png=produce_png
     )
 
     plot_category_stacked_summary_barplot(
         crispresso_output_folder_a,
-        results["folder_category_counts"], 
+        folder_category_counts, 
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
 
@@ -476,94 +488,94 @@ def plot_summary_barplots(results, crispresso_output_folder_a, twinpe_8cat_resul
     # )
 
     plot_category_summary_barplot(
-        results["folder_category_counts"], 
+        folder_category_counts, 
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
     
 
-def plot_per_base_pos_barplots(results, twinpe_8cat_results_folder, args, category_colors=CATEGORY_COLORS):
+def plot_per_base_pos_barplots(results_final, ins_start, ins_end, del_start, twinpe_8cat_results_folder, produce_png):
     
     plot_successful_twin_edit_counts_by_category(
-        results["bp_changes_arr"],
-        results["edit_counts"],
-        results["cat_perfect_pe_count_arr"],
-        results["cat_left_flap_count_arr"],
-        results["cat_right_flap_count_arr"],
-        results["cat_imperfect_pe_count_arr"],
-        results["cat_imperfect_wt_count_arr"],
-        results["cat_pe_indels_count_arr"],
-        results["cat_wt_indel_count_arr"],
-        results["cat_wt_count_arr"],
-        results["cat_uncategorized_count_arr"],
-        ins_start=results["ins_start"],
-        ins_end=results["ins_end"],
+        # results["bp_changes_arr"],
+        results_final["edit_counts"],
+        results_final["cat_perfect_pe_count_arr"],
+        results_final["cat_left_flap_count_arr"],
+        results_final["cat_right_flap_count_arr"],
+        results_final["cat_imperfect_pe_count_arr"],
+        # results["cat_imperfect_wt_count_arr"],
+        results_final["cat_pe_indels_count_arr"],
+        # results["cat_wt_indel_count_arr"],
+        # results["cat_wt_count_arr"],
+        # results["cat_uncategorized_count_arr"],
+        ins_start,
+        ins_end,
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
 
     plot_total_read_counts(
-        results["bp_changes_arr"],
-        results["total_counts"],
-        results["edit_counts"],
-        results["from_right_all_edit_counts"],
-        results["from_left_all_edit_counts"],
-        results["perfect_edit_counts"],
-        results["deletion_counts"],
-        results["insertion_counts"],
-        results["substitution_counts"],
-        ins_start=results["ins_start"],
-        ins_end=results["ins_end"],
+        # results["bp_changes_arr"],
+        results_final["total_counts"],
+        results_final["edit_counts"],
+        results_final["from_right_all_edit_counts"],
+        results_final["from_left_all_edit_counts"],
+        results_final["perfect_edit_counts"],
+        # results["deletion_counts"],
+        # results["insertion_counts"],
+        # results["substitution_counts"],
+        ins_start,
+        ins_end,
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS 
     )
 
     plot_edit_read_counts(
-        results["bp_changes_arr"],
-        results["edit_counts"],
-        results["from_right_all_edit_counts"],
-        results["from_left_all_edit_counts"],
-        results["perfect_edit_counts"],
-        results["deletion_counts"],
-        results["insertion_counts"],
-        results["substitution_counts"],
-        ins_start=results["ins_start"],
-        ins_end=results["ins_end"],
+        # results["bp_changes_arr"],
+        results_final["edit_counts"],
+        results_final["from_right_all_edit_counts"],
+        results_final["from_left_all_edit_counts"],
+        results_final["perfect_edit_counts"],
+        # results["deletion_counts"],
+        # results["insertion_counts"],
+        # results["substitution_counts"],
+        ins_start,
+        ins_end,
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
 
     plot_edit_read_counts_with_indels(
-        results["edit_counts"],
-        results["bp_changes_arr"],
-        results["edit_counts_with_indels"],
-        results["from_right_all_edit_counts"],
-        results["from_right_all_edit_counts_with_indels"],
-        results["from_left_all_edit_counts"],
-        results["from_left_all_edit_counts_with_indels"],
-        ins_start=results["ins_start"],
-        ins_end=results["ins_end"],
+        results_final["edit_counts"],
+        # results["bp_changes_arr"],
+        results_final["edit_counts_with_indels"],
+        results_final["from_right_all_edit_counts"],
+        results_final["from_right_all_edit_counts_with_indels"],
+        results_final["from_left_all_edit_counts"],
+        results_final["from_left_all_edit_counts_with_indels"],
+        ins_start,
+        ins_end,
         fig_root=twinpe_8cat_results_folder,
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
 
     plot_editing_summary(
-        results["full_deletion_counts"], 
-        results["full_insertion_counts"], 
-        results["full_substitution_counts"], 
-        results["full_edit_counts"], 
-        results["full_total_counts"], 
-        results["ins_start"], 
-        results["ins_end"], 
-        results["del_start"],
-        results["del_end"],
+        results_final["full_deletion_counts"], 
+        results_final["full_insertion_counts"], 
+        results_final["full_substitution_counts"], 
+        results_final["full_edit_counts"], 
+        results_final["full_total_counts"], 
+        # results["ins_start"], 
+        ins_end,
+        del_start,
+        # results["del_end"],
         fig_root=twinpe_8cat_results_folder, 
-        produce_png=args.produce_png, 
+        produce_png=produce_png, 
         category_colors=CATEGORY_COLORS
     )
 
@@ -581,6 +593,7 @@ def plot_per_base_pos_barplots(results, twinpe_8cat_results_folder, args, catego
 
 
 def get_ref_base_changes(comp_ref_seq, wt_aln_seq, twin_aln_seq):
+    # works for both compound variants
     bp_changes_arr = []
     del_start = None
     del_end = None
@@ -630,13 +643,13 @@ def get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start
         # match_arr_to_comp_base_index[ind] = comp_ind
 
     if del_start < ins_start:
-        # del_match_arr = match_arr[:del_end-del_start+1]
+        del_match_arr = match_arr[:del_end-del_start+1]
         ins_match_arr = match_arr[del_end-del_start+1:]
     else:
-        # del_match_arr = match_arr[ins_end-ins_start+1:]
+        del_match_arr = match_arr[ins_end-ins_start+1:]
         ins_match_arr = match_arr[:ins_end-ins_start+1]
 
-    return match_arr, ins_match_arr
+    return match_arr, ins_match_arr, del_match_arr
 
 
 def indel_checking(all_insertion_left_positions, all_deletion_positions, del_start, del_end, ins_start, ins_end, ignore_extraspacer_deletions, pegRNA_intervals):
@@ -676,63 +689,29 @@ def indel_checking(all_insertion_left_positions, all_deletion_positions, del_sta
     return has_indel
 
 
-def analyze_single_crispresso_output(
-    crispresso_output_folder, 
-    twinpe_8cat_results_folder, 
-    comp_ref_seq=None, 
-    twin_seq=None, 
-    twin_aln_seq=None, 
-    wt_seq=None, 
-    wt_aln_seq=None, 
-    # comp_ref_name=None, 
-    num_changes_to_check=2, 
-    ignore_extraspacer_deletions=False, 
-    # num_changes_to_check=1, 
-    # consider_changes_outside_of_guide=False, 
-    produce_png=False
-):
-    """ 
-    
-    """
-
+def categorize_alleles(crispresso_output_folder=None, comp_ref_seq=None, twin_aln_seq=None, wt_aln_seq=None,  num_changes_to_check=2, ignore_extraspacer_deletions=False):
     # Load and validate CRISPResso2 outputs
     crispresso_info_file = os.path.join(crispresso_output_folder, "CRISPResso2_info.json")
     if not os.path.exists(crispresso_info_file):
         sys.exit(f"CRISPResso2 output missing: {crispresso_info_file}")
-
     try:
         crispresso2_info = CRISPRessoShared.load_crispresso_info(crispresso_output_folder)
     except Exception as e:
         sys.exit(f"Could not open CRISPResso2 info file: {e}")
-
+        
     ref_names = crispresso2_info["results"].get("ref_names", [])
     if len(ref_names) != 1 or ref_names[0] != "Compound":
         sys.exit(f"CRISPResso2 was not run against the 'Compound' reference only - did CRISPResso2 run complete successfully?\nFound reference: {ref_names}")
 
-    output_root = twinpe_8cat_results_folder
+    # Load all necessary info once
     ref = crispresso2_info["results"]["refs"]["Compound"]
-    pegRNA_cut_points = ref["sgRNA_cut_points"]
-    pegRNA_plot_cut_points = ref["sgRNA_plot_cut_points"]
     pegRNA_intervals = ref["sgRNA_intervals"]
-    pegRNA_mismatches = ref["sgRNA_mismatches"]
-    pegRNA_names = ref["sgRNA_names"]
+    # pegRNA_cut_points = ref["sgRNA_cut_points"]
+    # pegRNA_plot_cut_points = ref["sgRNA_plot_cut_points"]
+    # pegRNA_mismatches = ref["sgRNA_mismatches"]
+    # pegRNA_names = ref["sgRNA_names"]
 
-    # if consider_changes_outside_of_guide:
-    #     if not crispresso2_info["running_info"]["args"].write_detailed_allele_table:
-    #         raise Exception(
-    #             "To use parameter --consider_changes_outside_of_guide, CRISPResso run must be run with the parameter --write_detailed_allele_table"
-    #         )
-
-    # May want to add this option to args
-    # Determine which reference indices to analyze: either the full reference or
-    # just the CRISPResso quantification window.
-    # if consider_changes_outside_of_guide:
-    #     ref_positions_to_include = [x for x in range(len(ref_seq))]
-    # else:
-    #     ref_positions_to_include = crispresso2_info["results"]["refs"][ref_name][
-    #         "include_idxs"
-    #     ]
-
+    # TODO: need to add supoort to get_ref_base_changes() for determining ins del region in A vs B
     # Get insertion/deletion regions and base changes
     bp_changes_arr, del_start, del_end, ins_start, ins_end, ins_region_len = get_ref_base_changes(comp_ref_seq, wt_aln_seq, twin_aln_seq)
 
@@ -752,74 +731,7 @@ def analyze_single_crispresso_output(
     zf = z.open(crispresso2_info["running_info"]["allele_frequency_table_filename"])
     df_alleles = pd.read_csv(zf, sep="\t")
 
-    from_left_all_edit_counts = [0] * ins_region_len
-    from_right_all_edit_counts = [0] * ins_region_len
-
-    from_left_all_edit_counts_no_indels = [0] * ins_region_len
-    from_left_all_edit_counts_with_indels = [0] * ins_region_len
-    from_right_all_edit_counts_no_indels = [0] * ins_region_len
-    from_right_all_edit_counts_with_indels = [0] * ins_region_len
-    edit_counts_no_indels = [0] * ins_region_len
-    edit_counts_with_indels = [0] * ins_region_len
-
-    allele_counts = {} # e.g. TTRTT > 100
-    allele_categories = {} # e.g. TTRTT > Left_flap
-
-    # Only plot ins region
-    edit_counts = [0] * ins_region_len
-    deletion_counts = [0] * ins_region_len # check if fix needed
-    insertion_counts = [0] * ins_region_len
-    substitution_counts = [0] * ins_region_len
-    perfect_T_count = 0
-    
-    # Plot full ins del region
-    full_edit_counts = [0] * len(bp_changes_arr)
-    full_deletion_counts = [0] * len(bp_changes_arr)
-    full_insertion_counts = [0] * len(bp_changes_arr)
-    full_substitution_counts = [0] * len(bp_changes_arr)
-    full_edit_counts_with_indels = [0] * len(bp_changes_arr)
-    full_edit_counts_no_indels = [0] * len(bp_changes_arr)
-    full_perfect_T_count = 0
-
-    total_alleles = 0
-    total_alleles_reads = 0
-    total_alleles_deletions_reads = 0
-
-    cat_wt_count = 0
-    cat_wt_count_arr = [0] * ins_region_len
-
-    cat_wt_indel_count = 0
-    cat_wt_indel_count_arr = [0] * ins_region_len
-
-    cat_left_flap_count = 0
-    cat_left_flap_count_arr = [0] * ins_region_len
-
-    cat_right_flap_count = 0
-    cat_right_flap_count_arr = [0] * ins_region_len
-
-    cat_perfect_pe_count = 0
-    cat_perfect_pe_count_arr = [0] * ins_region_len
-
-    cat_imperfect_pe_count = 0
-    cat_imperfect_pe_count_arr = [0] * ins_region_len
-
-    cat_imperfect_wt_count = 0
-    cat_imperfect_wt_count_arr = [0] * ins_region_len
-
-    cat_pe_indels_count = 0
-    cat_pe_indels_count_arr = [0] * ins_region_len
-
-    cat_uncategorized_count = 0
-    cat_uncategorized_count_arr = [0] * ins_region_len
-
-    # has_indel_in_match_arr_count = 0
-    # has_any_indel_byproduct_count = 0
-
-    # iterate all alleles in input allele table
     for idx, allele in df_alleles.iterrows():
-        total_alleles += 1
-        total_alleles_reads += allele["#Reads"]
-
         comp_aln_seq_read = allele.Reference_Sequence
         read_aln_seq = allele.Aligned_Sequence
 
@@ -830,7 +742,7 @@ def analyze_single_crispresso_output(
         # match_arr_to_comp_base_index = {}
 
         # Determine reads base matching for insertion/deletion region
-        match_arr, ins_match_arr = get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start, ins_end)
+        match_arr, ins_match_arr, del_match_arr = get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start, ins_end)
 
         # check match_arr for indels - repetitive if checking allele table
         # has_indel_in_match_arr = any(m in ["I", "D"] for m in match_arr)
@@ -838,16 +750,6 @@ def analyze_single_crispresso_output(
         #     has_indel_in_match_arr_count += 1
 
         has_indel = indel_checking(allele.all_insertion_left_positions, allele.all_deletion_positions, del_start, del_end, ins_start, ins_end, ignore_extraspacer_deletions, pegRNA_intervals)
-
-        # TODO: Unused - use for indel tri-barplot?
-        if has_indel:
-            total_alleles_deletions_reads += allele['#Reads']
-
-        match_arr_str = "\t".join(match_arr) + "\t" + str(has_indel)
-
-        if match_arr_str not in allele_counts:
-            allele_counts[match_arr_str] = 0
-        allele_counts[match_arr_str] += allele['#Reads']
 
         total_TE_count = match_arr.count("T")
         has_all_TE = (total_TE_count == len(match_arr))
@@ -879,89 +781,226 @@ def analyze_single_crispresso_output(
             # is_left_flap = all(m == "T" for m in match_arr[del_end-del_start+1:del_end-del_start+1+num_changes_to_check])
             # is_right_flap = all(m == "T" for m in match_arr[-num_changes_to_check:])
 
-        category = "NA"
         if has_all_TE and has_indel:
-            category = "PE_Indel"
-            df_alleles.at[idx,'Category'] = category
+            df_alleles.at[idx,'Category'] = "PE_Indel"
+        elif has_all_TE:
+            df_alleles.at[idx,'Category'] = "Perfect_PE"
+        elif has_all_WT and has_indel:
+            df_alleles.at[idx,'Category'] = "WT_Indel"
+        elif has_all_WT:
+            df_alleles.at[idx,'Category'] = "WT"
+        elif is_left_flap and not is_right_flap:
+            df_alleles.at[idx,'Category'] = "Left_Flap"
+        elif is_right_flap and not is_left_flap:
+            df_alleles.at[idx,'Category'] = "Right_Flap"
+        elif has_any_WT and not has_any_TE_in_insertion:
+            df_alleles.at[idx,'Category'] = "Imperfect_WT"
+        elif has_any_TE:
+            df_alleles.at[idx,'Category'] = "Imperfect_PE"
+        else:
+            df_alleles.at[idx,'Category'] = "Uncategorized"
+
+    return {
+        "df_alleles": df_alleles, 
+        "pegRNA_cut_points": ref["sgRNA_cut_points"],
+        "pegRNA_plot_cut_points": ref["sgRNA_plot_cut_points"],
+        "pegRNA_intervals": ref["sgRNA_intervals"],
+        "pegRNA_mismatches": ref["sgRNA_mismatches"],
+        "pegRNA_names": ref["sgRNA_names"], 
+        "bp_changes_arr": bp_changes_arr, 
+        "del_start": del_start, 
+        "del_end": del_end, 
+        "ins_start": ins_start, 
+        "ins_end": ins_end, 
+        "ins_region_len": ins_region_len
+    }
+
+def analyze_collapsed_categorized_alleles(
+    # crispresso_output_folder, 
+    df_alleles_final, 
+    twinpe_8cat_results_folder, 
+    # wt_seq=None, 
+    # twin_seq=None, 
+    # wt_aln_seq_a=None, 
+    # twin_aln_seq_a=None, 
+    # comp_ref_seq_a=None, 
+    # wt_aln_seq_b=None, 
+    # twin_aln_seq_b=None, 
+    # comp_ref_seq_b=None, 
+    bp_changes_arr_a=None, 
+    del_start_a=None, 
+    del_end_a=None, 
+    ins_start_a=None, 
+    ins_end_a=None, 
+    ins_region_len_a=None, 
+    pegRNA_intervals_a=None, 
+    bp_changes_arr_b=None, 
+    del_start_b=None, 
+    del_end_b=None, 
+    ins_start_b=None, 
+    ins_end_b=None, 
+    ins_region_len_b=None, 
+    pegRNA_intervals_b=None, 
+    # num_changes_to_check=2, 
+    ignore_extraspacer_deletions=False, 
+    # produce_png=False
+):
+    if ins_region_len_a != ins_region_len_b:
+        raise ValueError("Insertion region lengths for A and B do not match.")
+    
+    # Only plot ins region
+    edit_counts = [0] * ins_region_len_a
+    from_left_all_edit_counts = [0] * ins_region_len_a
+    from_right_all_edit_counts = [0] * ins_region_len_a
+    cat_perfect_pe_count = 0
+    cat_perfect_pe_count_arr = [0] * ins_region_len_a
+    cat_pe_indels_count = 0
+    cat_pe_indels_count_arr = [0] * ins_region_len_a
+    cat_left_flap_count = 0
+    cat_left_flap_count_arr = [0] * ins_region_len_a
+    cat_right_flap_count = 0
+    cat_right_flap_count_arr = [0] * ins_region_len_a
+    cat_imperfect_pe_count = 0
+    cat_imperfect_pe_count_arr = [0] * ins_region_len_a
+    cat_imperfect_wt_count = 0
+    # cat_imperfect_wt_count_arr = [0] * ins_region_len_a
+    cat_wt_indel_count = 0
+    # cat_wt_indel_count_arr = [0] * ins_region_len_a
+    cat_wt_count = 0
+    # cat_wt_count_arr = [0] * ins_region_len_a
+    cat_uncategorized_count = 0
+    # cat_uncategorized_count_arr = [0] * ins_region_len_a
+    from_left_all_edit_counts_with_indels = [0] * ins_region_len_a
+    # from_left_all_edit_counts_no_indels = [0] * ins_region_len_a
+    from_right_all_edit_counts_with_indels = [0] * ins_region_len_a
+    # from_right_all_edit_counts_no_indels = [0] * ins_region_len_a
+    edit_counts_with_indels = [0] * ins_region_len_a
+    # edit_counts_no_indels = [0] * ins_region_len_a
+    # deletion_counts = [0] * ins_region_len # check if fix needed
+    # insertion_counts = [0] * ins_region_len_a
+    # substitution_counts = [0] * ins_region_len_a
+    allele_counts = {} # e.g. TTRTT > 100
+    # allele_categories = {} # e.g. TTRTT > Left_flap
+    perfect_T_count = 0
+
+    if len(bp_changes_arr_a) != len(bp_changes_arr_b):
+        raise ValueError("Base changes array lengths for A and B do not match.")
+
+    # Plot full ins del region
+    full_edit_counts = [0] * len(bp_changes_arr_a)
+    full_deletion_counts = [0] * len(bp_changes_arr_a)
+    full_insertion_counts = [0] * len(bp_changes_arr_a)
+    full_substitution_counts = [0] * len(bp_changes_arr_a)
+    # full_edit_counts_with_indels = [0] * len(bp_changes_arr_a)
+    # full_edit_counts_no_indels = [0] * len(bp_changes_arr_a)
+    # full_perfect_T_count = 0
+
+    total_alleles = 0
+    total_alleles_reads = 0
+    # total_alleles_deletions_reads = 0
+
+    # has_indel_in_match_arr_count = 0
+    # has_any_indel_byproduct_count = 0
+
+    # iterate all alleles in input allele table
+    for idx, allele in df_alleles_final.iterrows():
+        comp_aln_seq_read = allele.Reference_Sequence
+        read_aln_seq = allele.Aligned_Sequence
+
+        total_alleles += 1
+        total_alleles_reads += allele["#Reads"]
+
+        # Map this reads aligned bases to Compound ref aligned bases 
+        read_map = get_refpos_values(comp_aln_seq_read, read_aln_seq)
+
+        if allele['allele_source'] == 'A':
+            # Determine reads base matching for insertion/deletion region
+            match_arr, ins_match_arr, del_match_arr = get_read_match_array(bp_changes_arr_a, read_map, del_start_a, del_end_a, ins_start_a, ins_end_a)
+            has_indel = indel_checking(allele.all_insertion_left_positions, allele.all_deletion_positions, del_start_a, del_end_a, ins_start_a, ins_end_a, ignore_extraspacer_deletions, pegRNA_intervals_a)
+        else:
+            match_arr, ins_match_arr, del_match_arr = get_read_match_array(bp_changes_arr_b, read_map, del_start_b, del_end_b, ins_start_b, ins_end_b)
+            has_indel = indel_checking(allele.all_insertion_left_positions, allele.all_deletion_positions, del_start_b, del_end_b, ins_start_b, ins_end_b, ignore_extraspacer_deletions, pegRNA_intervals_b)
+
+        # TODO: Unused - use for indel tri-barplot?
+        # if has_indel:
+        #     total_alleles_deletions_reads += allele['#Reads']
+
+        # Use compound variant A for both A and B alleles
+        match_arr_str = "\t".join(del_match_arr) + "\t".join(ins_match_arr) + "\t" + str(has_indel)
+
+        if match_arr_str not in allele_counts:
+            allele_counts[match_arr_str] = 0
+        allele_counts[match_arr_str] += allele['#Reads']
+
+        if allele['Category'] == "PE_Indel":
             cat_pe_indels_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_pe_indels_count_arr[pos_idx] += allele['#Reads']
+                # Redundant check
+                # if match == 'T':
+                cat_pe_indels_count_arr[pos_idx] += allele['#Reads']
         
-        elif has_all_TE:
-            category = "Perfect_PE"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "Perfect_PE":
             cat_perfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_perfect_pe_count_arr[pos_idx] += allele['#Reads']
+                # Redundant check
+                # if match == 'T':
+                cat_perfect_pe_count_arr[pos_idx] += allele['#Reads']
 
-        elif has_all_WT and has_indel:
-            category = "WT_Indel"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "WT_Indel":
             cat_wt_indel_count += allele['#Reads']
-            # this can't be true by definition
-            for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_wt_indel_count_arr[pos_idx] += allele['#Reads']
+            # This can't be true by definition
+            # for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
+            #     if match == 'T':
+            #         cat_wt_indel_count_arr[pos_idx] += allele['#Reads']
 
-        elif has_all_WT:
-            category = "WT"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "WT":
             cat_wt_count += allele['#Reads']
             # this can't be true by definition
-            for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_wt_count_arr[pos_idx] += allele['#Reads']
+            # for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
+            #     if match == 'T':
+            #         cat_wt_count_arr[pos_idx] += allele['#Reads']
 
-        elif is_left_flap and not is_right_flap:
-            category = "Left_Flap"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "Left_Flap":
             cat_left_flap_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 if match == 'T':
                     cat_left_flap_count_arr[pos_idx] += allele['#Reads']
 
-        elif is_right_flap and not is_left_flap:
-            category = "Right_Flap"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "Right_Flap":
             cat_right_flap_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 if match == 'T':
                     cat_right_flap_count_arr[pos_idx] += allele['#Reads']
 
-        elif has_any_WT and not has_any_TE_in_insertion:
-            category = "Imperfect_WT"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "Imperfect_WT":
             cat_imperfect_wt_count += allele['#Reads']
-            for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_imperfect_wt_count_arr[pos_idx] += allele['#Reads']
+            # The cat_imperfect_wt_count_arr is currently not used for plotting
+            # for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
+            #     if match == 'T':
+            #         cat_imperfect_wt_count_arr[pos_idx] += allele['#Reads']
 
-        elif has_any_TE:
-            category = "Imperfect_PE"
-            df_alleles.at[idx,'Category'] = category
+        elif allele['Category'] == "Imperfect_PE":
             cat_imperfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 if match == 'T':
                     cat_imperfect_pe_count_arr[pos_idx] += allele['#Reads']
 
         else:
-            category = "Uncategorized"
-            df_alleles.at[idx,'Category'] = category
             cat_uncategorized_count += allele['#Reads']
-            for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match == 'T':
-                    cat_uncategorized_count_arr[pos_idx] += allele['#Reads']
+            # This cat_uncategorized_count_arr is currently not used for plotting
+            # for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
+            #     if match == 'T':
+            #         cat_uncategorized_count_arr[pos_idx] += allele['#Reads']
 
-        if (
-            match_arr_str in allele_categories
-            and allele_categories[match_arr_str] != category
-        ):
-            raise Exception(
-                f"Conflicting categories for {match_arr_str} {category} vs {allele_categories[match_arr_str]}"
-            )
-        allele_categories[match_arr_str] = category
+        # TODO: Removed this due to dual compound conflicts - Is this still necessary?
+        # if (
+        #     match_arr_str in allele_categories
+        #     and allele_categories[match_arr_str] != allele['Category']
+        # ):
+        #     raise Exception(
+        #         f"Conflicting categories for {match_arr_str} {allele['Category']} vs {allele_categories[match_arr_str]}"
+        #     )
+        # allele_categories[match_arr_str] = allele['Category']
 
         for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
             if match == 'T':
@@ -969,8 +1008,8 @@ def analyze_single_crispresso_output(
 
                 if has_indel:
                     from_left_all_edit_counts_with_indels[pos_idx] += allele['#Reads']
-                else:
-                    from_left_all_edit_counts_no_indels[pos_idx] += allele['#Reads']
+                # else:
+                #     from_left_all_edit_counts_no_indels[pos_idx] += allele['#Reads']
 
             else:
                 break
@@ -981,8 +1020,8 @@ def analyze_single_crispresso_output(
 
                 if has_indel:
                     from_right_all_edit_counts_with_indels[pos_idx] += allele['#Reads']
-                else:
-                    from_right_all_edit_counts_no_indels[pos_idx] += allele['#Reads']
+                # else:
+                #     from_right_all_edit_counts_no_indels[pos_idx] += allele['#Reads']
             else:
                 break
 
@@ -991,32 +1030,32 @@ def analyze_single_crispresso_output(
                 edit_counts[pos_idx] += allele['#Reads']
                 if has_indel:
                     edit_counts_with_indels[pos_idx] += allele['#Reads']
-                else:
-                    edit_counts_no_indels[pos_idx] += allele['#Reads']
-            if match == 'D':
-                deletion_counts[pos_idx] += allele['#Reads']
-            if match == "I":
-                insertion_counts[pos_idx] += allele["#Reads"]
-            if match == "S":
-                substitution_counts[pos_idx] += allele["#Reads"]
+            #     else:
+            #         edit_counts_no_indels[pos_idx] += allele['#Reads']
+            # if match == 'D':
+            #     deletion_counts[pos_idx] += allele['#Reads']
+            # if match == "I":
+            #     insertion_counts[pos_idx] += allele["#Reads"]
+            # if match == "S":
+            #     substitution_counts[pos_idx] += allele["#Reads"]
         if ins_match_arr == ['T']*len(ins_match_arr):
             perfect_T_count += allele['#Reads']
 
-        for pos_idx, match in zip(range(len(bp_changes_arr)), match_arr):
+        for pos_idx, match in zip(range(len(bp_changes_arr_a)), del_match_arr+ins_match_arr): # match_arr):
             if match == 'T':
                 full_edit_counts[pos_idx] += allele['#Reads']
-                if has_indel:
-                    full_edit_counts_with_indels[pos_idx] += allele['#Reads']
-                else:
-                    full_edit_counts_no_indels[pos_idx] += allele['#Reads']
+                # if has_indel:
+                #     full_edit_counts_with_indels[pos_idx] += allele['#Reads']
+                # else:
+                #     full_edit_counts_no_indels[pos_idx] += allele['#Reads']
             if match == 'D':
                 full_deletion_counts[pos_idx] += allele['#Reads']
             if match == "I":
                 full_insertion_counts[pos_idx] += allele["#Reads"]
             if match == "S":
                 full_substitution_counts[pos_idx] += allele["#Reads"]
-        if match_arr == ['T']*len(match_arr):
-            full_perfect_T_count += allele['#Reads']
+        # if match_arr == ['T']*len(match_arr):
+        #     full_perfect_T_count += allele['#Reads']
 
     folder_category_counts = {
         "WT": cat_wt_count,
@@ -1030,33 +1069,13 @@ def analyze_single_crispresso_output(
         "Uncategorized": cat_uncategorized_count,
     }
 
-    #### Debugging ####
-    # for c in df_alleles['Category'].unique():
-    #     print(f"Category: {c}")
-    #     for i, row in df_alleles.iterrows():
-    #         if row['Category'] == c:
-    #             print(i)
-    #             print(row['Aligned_Sequence'])
-    #             print(row["Reference_Sequence"])
-
-    # for i, row in df_alleles.iterrows():
-    #     if row['Category'] == 'Imperfect_PE':
-    #         print(i)
-    #         print(row['Aligned_Sequence'])
-    #         print(row["Reference_Sequence"])
-    # write df to csv file
-    # df_alleles.to_csv(
-    #     os.path.join(output_root, "c0.detailed_allele_table_with_categories.csv"),
-    #     index=False,
-    # )
-
     with open(
-        os.path.join(output_root, "c4.top_alleles_by_category.txt"), "w"
+        os.path.join(twinpe_8cat_results_folder, "c4.top_alleles_by_category.txt"), "w"
     ) as fout:
-        for c in df_alleles['Category'].unique():
+        for c in df_alleles_final['Category'].unique():
             fc = c.replace("_", " ")            
             fout.write(f"Category: {c}, Total reads: {folder_category_counts[fc]}\n")
-            for i, row in df_alleles[df_alleles['Category'] == c].sort_values(by='#Reads', ascending=False).head(50).iterrows():
+            for i, row in df_alleles_final[df_alleles_final['Category'] == c].sort_values(by='#Reads', ascending=False).head(50).iterrows():
                 fout.write(f"Read {i} count: {row['#Reads']}\n")
                 fout.write(f"{row['Aligned_Sequence']}\n")
                 fout.write(f"{row['Reference_Sequence']}\n")
@@ -1066,22 +1085,21 @@ def analyze_single_crispresso_output(
     imperfect_from_right_all_edit_counts = [x-perfect_T_count for x in from_right_all_edit_counts]
     # number of perfect_PE alleles at each position - now excludes those with indels
     # should this take indels into account? - what exactly are these two plots that use this trying to show?
-    perfect_edit_counts = [perfect_T_count] * ins_region_len
-    full_perfect_edit_counts = [full_perfect_T_count] * len(bp_changes_arr)
-    # total alleles
-    total_counts = [total_alleles_reads] * ins_region_len
-    full_total_counts = [total_alleles_reads] * len(bp_changes_arr)
+    perfect_edit_counts = [perfect_T_count] * ins_region_len_a
+    # full_perfect_edit_counts = [full_perfect_T_count] * len(bp_changes_arr_a)
+    total_counts = [total_alleles_reads] * ins_region_len_a
+    full_total_counts = [total_alleles_reads] * len(bp_changes_arr_a)
 
-    with open(output_root + "/c3.allele_counts.txt", "w") as fout:
+    with open(twinpe_8cat_results_folder + "/c3.allele_counts.txt", "w") as fout:
         sorted_allele_counts = sorted(
             allele_counts.keys(), key=lambda x: allele_counts[x], reverse=True
         )
-        fout.write("\t".join([str(x) for x in bp_changes_arr]) + "\thas_indel\tcount\n")
+        fout.write("\t".join([str(x) for x in bp_changes_arr_a]) + "\thas_indel\tcount\n")
         for allele_str in sorted_allele_counts:
             fout.write(allele_str + "\t" + str(allele_counts[allele_str]) + "\n")
 
-    with open(output_root + "/c2.arrays.txt", "w") as fout:
-        fout.write("Class\t" + "\t".join([str(x) for x in bp_changes_arr]) + "\n")
+    with open(twinpe_8cat_results_folder + "/c2.arrays.txt", "w") as fout:
+        fout.write("Class\t" + "\t".join([str(x) for x in bp_changes_arr_a]) + "\n")
         fout.write("total_counts\t" + "\t".join([str(x) for x in total_counts]) + "\n")
         fout.write("edit_counts\t" + "\t".join([str(x) for x in edit_counts]) + "\n")
         fout.write(
@@ -1109,17 +1127,17 @@ def analyze_single_crispresso_output(
             + "\t".join([str(x) for x in imperfect_from_right_all_edit_counts])
             + "\n"
         )
-        fout.write(
-            "deletion_counts\t" + "\t".join([str(x) for x in deletion_counts]) + "\n"
-        )
-        fout.write(
-            "insertion_counts\t" + "\t".join([str(x) for x in insertion_counts]) + "\n"
-        )
-        fout.write(
-            "substitution_counts\t" + "\t".join([str(x) for x in substitution_counts]) + "\n"
-        )
+        # fout.write(
+        #     "deletion_counts\t" + "\t".join([str(x) for x in deletion_counts]) + "\n"
+        # )
+        # fout.write(
+        #     "insertion_counts\t" + "\t".join([str(x) for x in insertion_counts]) + "\n"
+        # )
+        # fout.write(
+        #     "substitution_counts\t" + "\t".join([str(x) for x in substitution_counts]) + "\n"
+        # )
 
-    with open(output_root + "/c1.counts.txt", "w") as fout:
+    with open(twinpe_8cat_results_folder + "/c1.counts.txt", "w") as fout:
         fout.write(
             "\t".join(
                 [
@@ -1155,67 +1173,116 @@ def analyze_single_crispresso_output(
             )
             + "\n"
         )
+    # No longer set through this function
+    # min_frequency = crispresso2_info["running_info"][
+    #     "args"
+    # ].min_frequency_alleles_around_cut_to_plot
+    # max_n_rows = crispresso2_info["running_info"][
+    #     "args"
+    # ].max_rows_alleles_around_cut_to_plot
 
-    min_frequency = crispresso2_info["running_info"][
-        "args"
-    ].min_frequency_alleles_around_cut_to_plot
-    max_n_rows = crispresso2_info["running_info"][
-        "args"
-    ].max_rows_alleles_around_cut_to_plot
-
-    df_alleles.to_csv(
-        os.path.join(output_root, "c7.detailed_allele_table_with_categories.csv"), 
+    df_alleles_final.to_csv(
+        os.path.join(twinpe_8cat_results_folder, "c8.detailed_allele_table_with_categories.csv"), 
                      index=False
     )
 
     return {
-        "folder_category_counts": folder_category_counts,
-        "df_alleles": df_alleles,
-        "bp_changes_arr": bp_changes_arr,
-        "edit_counts": edit_counts,
-        "full_edit_counts": full_edit_counts,
+        # input to multiple functions
+        "edit_counts": edit_counts, 
+        "from_left_all_edit_counts": from_left_all_edit_counts, 
+        "from_right_all_edit_counts": from_right_all_edit_counts, 
         "perfect_edit_counts": perfect_edit_counts,
-        "deletion_counts": deletion_counts,
-        "insertion_counts": insertion_counts,
-        "substitution_counts": substitution_counts,
+        # inputs to plot_successful_twin_edit_counts_by_category only
+        "folder_category_counts": folder_category_counts, 
+        "cat_perfect_pe_count_arr": cat_perfect_pe_count_arr,
+        "cat_left_flap_count_arr": cat_left_flap_count_arr,
+        "cat_right_flap_count_arr": cat_right_flap_count_arr, 
+        "cat_imperfect_pe_count_arr": cat_imperfect_pe_count_arr,
+        "cat_pe_indels_count_arr": cat_pe_indels_count_arr,
+        # inputs to plot_total_read_counts only 
         "total_counts": total_counts,
+        # inputs to plot_edit_read_counts only
+        # inputs to plot_edit_read_counts_with_indels only 
+        "edit_counts_with_indels":  edit_counts_with_indels,
+        "from_right_all_edit_counts_with_indels": from_right_all_edit_counts_with_indels,
+        "from_left_all_edit_counts_with_indels": from_left_all_edit_counts_with_indels, 
+        # inputs to plot_editing_summary only
         "full_deletion_counts": full_deletion_counts,
         "full_insertion_counts": full_insertion_counts,
-        "full_substitution_counts": full_substitution_counts,
-        "full_total_counts": full_total_counts,
-        "cat_wt_count_arr": cat_wt_count_arr,
-        "cat_wt_indel_count_arr": cat_wt_indel_count_arr,
-        "cat_left_flap_count_arr": cat_left_flap_count_arr,
-        "cat_right_flap_count_arr": cat_right_flap_count_arr,
-        "cat_perfect_pe_count_arr": cat_perfect_pe_count_arr,
-        "cat_imperfect_pe_count_arr": cat_imperfect_pe_count_arr,
-        "cat_imperfect_wt_count_arr": cat_imperfect_wt_count_arr,
-        "cat_pe_indels_count_arr": cat_pe_indels_count_arr,
-        "cat_uncategorized_count_arr": cat_uncategorized_count_arr,
-        "edit_counts_with_indels":  edit_counts_with_indels,
-        "from_right_all_edit_counts": from_right_all_edit_counts,
-        "from_right_all_edit_counts_with_indels": from_right_all_edit_counts_with_indels,
-        "from_left_all_edit_counts": from_left_all_edit_counts,
-        "from_left_all_edit_counts_with_indels": from_left_all_edit_counts_with_indels,
-        "min_frequency": min_frequency,
-        "max_n_rows": max_n_rows,
-        "wt_seq": wt_seq,
-        "pegRNA_cut_points": pegRNA_cut_points,
-        "pegRNA_plot_cut_points": pegRNA_plot_cut_points,
-        "pegRNA_intervals": pegRNA_intervals,
-        "pegRNA_mismatches": pegRNA_mismatches,
-        "pegRNA_names": pegRNA_names,
-        "wt_aln_seq": wt_aln_seq,
-        "twin_aln_seq": twin_aln_seq, 
-        "ins_start": ins_start, 
-        "ins_end": ins_end, 
-        "del_start": del_start,
-        "del_end": del_end
+        "full_substitution_counts": full_substitution_counts, 
+        "full_edit_counts": full_edit_counts, 
+        "full_total_counts": full_total_counts
+
+        # Not used
+        # "df_alleles": df_alleles, 
+        # "bp_changes_arr": bp_changes_arr, 
+        # "cat_imperfect_wt_count_arr": cat_imperfect_wt_count_arr, 
+        # "cat_wt_indel_count_arr": cat_wt_indel_count_arr,
+        # "cat_wt_count_arr": cat_wt_count_arr,
+        # "cat_uncategorized_count_arr": cat_uncategorized_count_arr,
+        # "deletion_counts": deletion_counts,
+        # "insertion_counts": insertion_counts,
+        # "substitution_counts": substitution_counts, 
+        # "del_start": del_start,
+        # "del_end": del_end, 
+        # "ins_start": ins_start, 
+        # "ins_end": ins_end, 
+        # "wt_seq": wt_seq,
+        # "wt_aln_seq": wt_aln_seq,
+        # "twin_aln_seq": twin_aln_seq, 
+        # "min_frequency": min_frequency,
+        # "max_n_rows": max_n_rows, 
+        # "pegRNA_cut_points": pegRNA_cut_points,
+        # "pegRNA_plot_cut_points": pegRNA_plot_cut_points,
+        # "pegRNA_intervals": pegRNA_intervals,
+        # "pegRNA_mismatches": pegRNA_mismatches,
+        # "pegRNA_names": pegRNA_names, 
     }
 
 
+def get_allele_df_keys(df):
+    # Create sequence_key and take the lexicographically smaller of the forward and reverse complement
+    df = df.copy()
+    df['sequence_key_fw'] = df['Aligned_Sequence'].str.replace('-', '', regex=False)
+    df['sequence_key_rc'] = df['sequence_key_fw'].apply(reverse_complement)
+    df['sequence_key'] = df[['sequence_key_fw', 'sequence_key_rc']].min(axis=1)
+
+    return df
+
+
 def collapse_allele_categories(df_alleles_a, df_alleles_b):
-    pass
+    # Prepare sequence_key for both dataframes
+    a = get_allele_df_keys(df_alleles_a)
+    b = get_allele_df_keys(df_alleles_b)
+
+    # Check for duplicates in sequence_key within each dataframe
+    dupes_a = a.loc[a['sequence_key'].duplicated(), 'sequence_key']
+    if len(dupes_a):
+        raise ValueError(f"Duplicate sequence_key in df_alleles_a: {dupes_a.unique()}")
+
+    dupes_b = b.loc[b['sequence_key'].duplicated(), 'sequence_key']
+    if len(dupes_b):
+        raise ValueError(f"Duplicate sequence_key in df_alleles_b: {dupes_b.unique()}")
+
+    # Merge only the needed columns from B
+    b_subset = b[['sequence_key', 'Category', 'Aligned_Reference_Scores']]
+    merged = a.merge(b_subset, on='sequence_key', how='left', suffixes=('', '_B'), validate='one_to_one')
+
+    # Convert reference scores to numeric for comparison
+    ref_a = pd.to_numeric(merged['Aligned_Reference_Scores'], errors='raise')
+    ref_b = pd.to_numeric(merged['Aligned_Reference_Scores_B'], errors='raise')
+
+    # Decide whether to keep original A category or use B category
+    use_b = (merged['Category'] != merged['Category_B']) & (ref_b > ref_a)
+
+    # Update Category if B wins
+    merged['allele_source'] = np.where(use_b, 'B', 'A')
+    merged['Category'] = np.where(use_b, merged['Category_B'], merged['Category'])
+
+    # Drop helper columns from B
+    merged = merged.drop(columns=['sequence_key_fw', 'sequence_key_rc', 'sequence_key', 'Category_B', 'Aligned_Reference_Scores_B'])
+
+    return merged.reset_index(drop=True)
 
 
 def setBarMatplotlibDefaults():
@@ -1480,17 +1547,17 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
 
 
 def plot_successful_twin_edit_counts_by_category(
-    bp_changes_arr,
+    # bp_changes_arr,
     edit_counts,
     cat_perfect_pe_count_arr,
     cat_left_flap_count_arr,
     cat_right_flap_count_arr,
     cat_imperfect_pe_count_arr,
-    cat_imperfect_wt_count_arr,
+    # cat_imperfect_wt_count_arr,
     cat_pe_indels_count_arr,
-    cat_wt_indel_count_arr,
-    cat_wt_count_arr,
-    cat_uncategorized_count_arr,
+    # cat_wt_indel_count_arr,
+    # cat_wt_count_arr,
+    # cat_uncategorized_count_arr,
     ins_start, 
     ins_end,
     fig_root=None,
@@ -1555,15 +1622,15 @@ def plot_successful_twin_edit_counts_by_category(
 
 
 def plot_total_read_counts(
-    bp_changes_arr,
+    # bp_changes_arr,
     total_counts,
     edit_counts,
     from_right_all_edit_counts,
     from_left_all_edit_counts,
     perfect_edit_counts,
-    deletion_counts,
-    insertion_counts,
-    substitution_counts,
+    # deletion_counts,
+    # insertion_counts,
+    # substitution_counts,
     ins_start, 
     ins_end,
     fig_root=None,
@@ -1616,14 +1683,14 @@ def plot_total_read_counts(
 
 
 def plot_edit_read_counts(
-    bp_changes_arr,
+    # bp_changes_arr,
     edit_counts,
     from_right_all_edit_counts,
     from_left_all_edit_counts,
     perfect_edit_counts,
-    deletion_counts,
-    insertion_counts,
-    substitution_counts,
+    # deletion_counts,
+    # insertion_counts,
+    # substitution_counts,
     ins_start, 
     ins_end,
     fig_root=None,
@@ -1668,7 +1735,7 @@ def plot_edit_read_counts(
 
 def plot_edit_read_counts_with_indels(
     edit_counts,
-    bp_changes_arr,
+    # bp_changes_arr,
     edit_counts_with_indels,
     from_right_all_edit_counts,
     from_right_all_edit_counts_with_indels,
@@ -1760,7 +1827,20 @@ def plot_edit_read_counts_with_indels(
         plt.savefig(fig_root + "/a7.TPEs_vs_indels.png", bbox_inches='tight')
 
 
-def plot_editing_summary(full_deletion_counts, full_insertion_counts, full_substitution_counts, full_edit_counts, full_total_counts, ins_start, ins_end, del_start, del_end, fig_root=None, produce_png=False, category_colors=None):
+def plot_editing_summary(
+        full_deletion_counts, 
+        full_insertion_counts, 
+        full_substitution_counts, 
+        full_edit_counts, 
+        full_total_counts, 
+        # ins_start, 
+        ins_end, 
+        del_start, 
+        # del_end, 
+        fig_root=None, 
+        produce_png=False, 
+        category_colors=None
+    ):
     x = np.arange(len(full_deletion_counts))
     w = 0.27
     x_labels = [str(x) for x in range(del_start, ins_end+1)]
