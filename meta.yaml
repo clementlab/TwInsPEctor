@@ -1,0 +1,36 @@
+package:
+  name: twin_prime_editing
+  version: 0.1.0
+
+source:
+  path: ../..
+
+build:
+  noarch: python
+  script: python -m pip install . --no-deps --ignore-installed
+
+requirements:
+  host:
+    - python >=3.8
+    - pip
+  run:
+    - python >=3.8
+    - bioconda::crispresso2
+
+test:
+  imports:
+    - twin_prime_editing
+  commands:
+    - pytest
+
+about:
+  home: https://github.com/clementlab/twin_prime_editing
+  license: MIT
+  license_file: LICENSE
+  summary: "A package for twin prime editing analysis."
+  description: |
+    Tools and scripts for analyzing twin prime editing experiments, including data processing and visualization.
+
+extra:
+  authors:
+    - name: Nate Masson
