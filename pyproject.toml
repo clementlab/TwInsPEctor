@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "twin_prime_editing"
+version = "0.1.0"
+description = "Tools and scripts for analyzing twin prime editing experiments, including data processing and visualization."
+authors = [
+    { name="Nate Masson" },
+    { name="Kendell Clement" },
+]
+license = { file = "LICENSE" }
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    # Add your runtime dependencies here, e.g.:
+    # "numpy",
+    # "pandas",
+]
+
+[project.urls]
+Homepage = "https://github.com/clementlab/twin_prime_editing"
+
+[project.scripts]
+twinpe = "twin_prime_editing.twin_prime_editing:main"
