@@ -35,6 +35,16 @@ CATEGORY_COLORS = {
     "Uncategorized": "#7f7f7f"
 }
 
+ALPHA = 0.4
+
+BASE_COLORS = {
+    "A": (127/255, 201/255, 127/255, ALPHA),
+    "T": (190/255, 174/255, 212/255, ALPHA),
+    "C": (253/255, 192/255, 134/255, ALPHA),
+    "G": (255/255, 255/255, 153/255, ALPHA),
+    "N": (200/255, 200/255, 200/255, ALPHA)
+}
+
 
 def main():
     args = parse_args()
@@ -61,7 +71,7 @@ def main():
         subprocess.run(crispresso_cmd, check=True)
 
         print("Analyzing CRISPResso output...")
-        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_info=spacer_info)
+        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables) # twinpe_8cat_a_folder,
         print("Finished TwinPE analysis!")
 
     else:
@@ -85,7 +95,7 @@ def main():
         subprocess.run(crispresso_cmd_b, check=True)
 
         print("Analyzing CRISPResso output...")
-        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, crispresso_output_folder_b=crispresso_output_folder_b, args=args, comp_ref_seq_a=comp_ref_seq_a, wt_aln_seq_a=wt_aln_seq_a, twin_aln_seq_a=twin_aln_seq_a, comp_ref_seq_b=comp_ref_seq_b, wt_aln_seq_b=wt_aln_seq_b, twin_aln_seq_b=twin_aln_seq_b, spacer_info=spacer_info) # twinpe_8cat_a_folder, twinpe_8cat_b_folder, 
+        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, crispresso_output_folder_b=crispresso_output_folder_b, args=args, comp_ref_seq_a=comp_ref_seq_a, wt_aln_seq_a=wt_aln_seq_a, twin_aln_seq_a=twin_aln_seq_a, comp_ref_seq_b=comp_ref_seq_b, wt_aln_seq_b=wt_aln_seq_b, twin_aln_seq_b=twin_aln_seq_b, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables) # twinpe_8cat_a_folder, twinpe_8cat_b_folder, 
         print("Finished TwinPE analysis!")
 
     build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less)
@@ -127,6 +137,7 @@ def parse_args():
     parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=50, help="Default minimum homology score for a read to align to the compound reference amplicon")
     parser.add_argument("-f", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
     parser.add_argument("--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
+    parser.add_argument("-nat", "--no_allele_tables", action="store_true", help="Decrease run time when allele table are not wanted.")
     parser.add_argument("--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
     parser.add_argument("--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles table plot.")
     parser.add_argument("--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele table plot.")
@@ -441,7 +452,8 @@ def analyze_visualize_sample(
         twin_aln_seq_b=None, 
         wt_seq=None, 
         twin_seq=None, 
-        spacer_info=None,
+        spacer_info=None, 
+        skip_allele_tables=False
     ):
     """
     Runs classification and plotting functions for a single sample.
@@ -502,73 +514,76 @@ def analyze_visualize_sample(
         # ins_start_b=df_alleles_b_results["ins_start"] if not args.recoding_mode else None, 
         # ins_end_b=df_alleles_b_results["ins_end"] if not args.recoding_mode else None, 
         # del_start_b=df_alleles_b_results["del_start"] if not args.recoding_mode else None,  
-        # del_end_b=df_alleles_b_results["del_end"] if not args.recoding_mode else None,  
-        produce_png=args.produce_png, 
-        recoding_mode=args.recoding_mode
+        # del_end_b=df_alleles_b_results["del_end"] if not args.recoding_mode else None, 
+        insert_sequence=df_alleles_a_results["insert_sequence"], 
+        deletion_insertion_sequence=df_alleles_a_results["deletion_insertion_sequence"],
+        recoding_mode=args.recoding_mode, 
+        produce_png=args.produce_png
     )
 
-    setAlleleMatplotlibDefaults()
+    if not skip_allele_tables:
+        setAlleleMatplotlibDefaults()
 
-    # for results, twinpe_8cat_results_folder in [(results_a, twinpe_8cat_a_folder)]: # , (results_b, twinpe_8cat_b_folder)]: # Need to make many changes for this to work
-    if args.recoding_mode:
-        plot_categorical_allele_tables(
-            args.min_frequency_alleles,
-            args.max_n_rows, 
-            results_final["df_alleles"], 
-            args.wt_seq,
-            args.wt_seq, 
-            args.twin_seq,
-            results_final["pegRNA_cut_points"],
-            results_final["pegRNA_plot_cut_points"],
-            results_final["pegRNA_intervals"],
-            results_final["pegRNA_mismatches"],
-            results_final["pegRNA_names"],
-            spacer_info=spacer_info,
-            fig_root=twinpe_8cat_results_folder,
-            produce_png=args.produce_png,
-            plot_full_reads=args.plot_full_reads, 
-            recoding_mode=args.recoding_mode
-        )
-    else:
-        plot_categorical_allele_tables(
-            args.min_frequency_alleles,
-            args.max_n_rows, 
-            df_alleles_final_a,
-            args.wt_seq,
-            wt_aln_seq_a, 
-            twin_aln_seq_a,
-            df_alleles_a_results["pegRNA_cut_points"],
-            df_alleles_a_results["pegRNA_plot_cut_points"],
-            df_alleles_a_results["pegRNA_intervals"],
-            df_alleles_a_results["pegRNA_mismatches"],
-            df_alleles_a_results["pegRNA_names"],
-            spacer_info=spacer_info,
-            fig_root=twinpe_8cat_results_folder,
-            produce_png=args.produce_png,
-            plot_full_reads=args.plot_full_reads, 
-            recoding_mode=args.recoding_mode, 
-            run_label="a"
-        )
+        # for results, twinpe_8cat_results_folder in [(results_a, twinpe_8cat_a_folder)]: # , (results_b, twinpe_8cat_b_folder)]: # Need to make many changes for this to work
+        if args.recoding_mode:
+            plot_categorical_allele_tables(
+                args.min_frequency_alleles,
+                args.max_n_rows, 
+                results_final["df_alleles"], 
+                args.wt_seq,
+                args.wt_seq, 
+                args.twin_seq,
+                results_final["pegRNA_cut_points"],
+                results_final["pegRNA_plot_cut_points"],
+                results_final["pegRNA_intervals"],
+                results_final["pegRNA_mismatches"],
+                results_final["pegRNA_names"],
+                spacer_info=spacer_info,
+                fig_root=twinpe_8cat_results_folder,
+                produce_png=args.produce_png,
+                plot_full_reads=args.plot_full_reads, 
+                recoding_mode=args.recoding_mode
+            )
+        else:
+            plot_categorical_allele_tables(
+                args.min_frequency_alleles,
+                args.max_n_rows, 
+                df_alleles_final_a,
+                args.wt_seq,
+                wt_aln_seq_a, 
+                twin_aln_seq_a,
+                df_alleles_a_results["pegRNA_cut_points"],
+                df_alleles_a_results["pegRNA_plot_cut_points"],
+                df_alleles_a_results["pegRNA_intervals"],
+                df_alleles_a_results["pegRNA_mismatches"],
+                df_alleles_a_results["pegRNA_names"],
+                spacer_info=spacer_info,
+                fig_root=twinpe_8cat_results_folder,
+                produce_png=args.produce_png,
+                plot_full_reads=args.plot_full_reads, 
+                recoding_mode=args.recoding_mode, 
+                run_label="a"
+            )
 
-        plot_categorical_allele_tables(
-            args.min_frequency_alleles,
-            args.max_n_rows, 
-            df_alleles_final_b,
-            args.wt_seq,
-            wt_aln_seq_b, 
-            twin_aln_seq_b,
-            df_alleles_b_results["pegRNA_cut_points"],
-            df_alleles_b_results["pegRNA_plot_cut_points"],
-            df_alleles_b_results["pegRNA_intervals"],
-            df_alleles_b_results["pegRNA_mismatches"],
-            df_alleles_b_results["pegRNA_names"],
-            spacer_info=spacer_info,
-            fig_root=twinpe_8cat_results_folder,
-            produce_png=args.produce_png,
-            plot_full_reads=args.plot_full_reads, 
-            recoding_mode=args.recoding_mode, 
-            run_label="b"
-        )
+            plot_categorical_allele_tables(
+                args.min_frequency_alleles,
+                args.max_n_rows, 
+                df_alleles_final_b,
+                args.wt_seq,
+                wt_aln_seq_b, 
+                twin_aln_seq_b,
+                df_alleles_b_results["pegRNA_cut_points"],
+                df_alleles_b_results["pegRNA_plot_cut_points"],
+                df_alleles_b_results["pegRNA_intervals"],
+                df_alleles_b_results["pegRNA_mismatches"],
+                df_alleles_b_results["pegRNA_names"],
+                spacer_info=spacer_info,
+                fig_root=twinpe_8cat_results_folder,
+                produce_png=args.produce_png,
+                plot_full_reads=args.plot_full_reads, 
+                recoding_mode=args.recoding_mode, 
+                run_label="b"
+            )
 
 
 def plot_summary_barplots(folder_category_counts, crispresso_output_folder_a, twinpe_8cat_results_folder, produce_png):
@@ -601,27 +616,27 @@ def plot_summary_barplots(folder_category_counts, crispresso_output_folder_a, tw
     )
     
 
-def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, produce_png=False, recoding_mode=False):
+def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, insert_sequence=None, deletion_insertion_sequence=None, recoding_mode=False, produce_png=False,):
     
-    plot_successful_twin_edit_counts_by_category(
-        # results["bp_changes_arr"],
-        edit_counts=results_final["edit_counts"],
-        cat_perfect_pe_count_arr=results_final["cat_perfect_pe_count_arr"],
-        cat_left_flap_count_arr=results_final["cat_left_flap_count_arr"],
-        cat_right_flap_count_arr=results_final["cat_right_flap_count_arr"],
-        cat_imperfect_pe_count_arr=results_final["cat_imperfect_pe_count_arr"],
-        # results["cat_imperfect_wt_count_arr"],
-        cat_pe_indels_count_arr=results_final["cat_pe_indels_count_arr"],
-        # results["cat_wt_indel_count_arr"],
-        # results["cat_wt_count_arr"],
-        # results["cat_uncategorized_count_arr"],
-        # ins_start=ins_start_a,
-        # ins_end=ins_end_a, 
-        recoding_mode=recoding_mode, 
-        fig_root=twinpe_8cat_results_folder,
-        produce_png=produce_png, 
-        category_colors=CATEGORY_COLORS
-    )
+    # plot_successful_twin_edit_counts_by_category(
+    #     # results["bp_changes_arr"],
+    #     edit_counts=results_final["edit_counts"],
+    #     cat_perfect_pe_count_arr=results_final["cat_perfect_pe_count_arr"],
+    #     cat_left_flap_count_arr=results_final["cat_left_flap_count_arr"],
+    #     cat_right_flap_count_arr=results_final["cat_right_flap_count_arr"],
+    #     cat_imperfect_pe_count_arr=results_final["cat_imperfect_pe_count_arr"],
+    #     # results["cat_imperfect_wt_count_arr"],
+    #     cat_pe_indels_count_arr=results_final["cat_pe_indels_count_arr"],
+    #     # results["cat_wt_indel_count_arr"],
+    #     # results["cat_wt_count_arr"],
+    #     # results["cat_uncategorized_count_arr"],
+    #     # ins_start=ins_start_a,
+    #     # ins_end=ins_end_a, 
+    #     recoding_mode=recoding_mode, 
+    #     fig_root=twinpe_8cat_results_folder,
+    #     produce_png=produce_png, 
+    #     category_colors=CATEGORY_COLORS
+    # )
 
     plot_total_read_counts(
         # results["bp_changes_arr"],
@@ -635,6 +650,7 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
         # results["substitution_counts"],
         # ins_start=ins_start,
         # ins_end=ins_end, 
+        insert_sequence=insert_sequence,
         recoding_mode=recoding_mode, 
         fig_root=twinpe_8cat_results_folder,
         produce_png=produce_png, 
@@ -652,6 +668,7 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
         # results["substitution_counts"],
         # ins_start=ins_start,
         # ins_end=ins_end, 
+        insert_sequence=insert_sequence,
         recoding_mode=recoding_mode, 
         fig_root=twinpe_8cat_results_folder,
         produce_png=produce_png, 
@@ -668,6 +685,7 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
         from_left_all_edit_counts_with_indels=results_final["from_left_all_edit_counts_with_indels"],
         # ins_start=ins_start,
         # ins_end=ins_end, 
+        insert_sequence=insert_sequence,
         recoding_mode=recoding_mode, 
         fig_root=twinpe_8cat_results_folder,
         produce_png=produce_png, 
@@ -685,6 +703,7 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
             # ins_end=ins_end,
             # del_start=del_start,
             # results["del_end"], 
+            deletion_insertion_sequence=deletion_insertion_sequence,
             recoding_mode=recoding_mode, 
             fig_root=twinpe_8cat_results_folder, 
             produce_png=produce_png, 
@@ -700,6 +719,7 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
             full_total_counts=results_final["full_total_counts"], 
             # del_start=del_start,
             # ins_end=ins_end, 
+            deletion_insertion_sequence=deletion_insertion_sequence,
             recoding_mode=recoding_mode, 
             run_label="a", 
             del_len=del_len, 
@@ -709,23 +729,23 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
             category_colors=CATEGORY_COLORS
         )
 
-        # Might not need this extra plot since arrays are currently identical for a and b
-        plot_editing_summary(
-            full_deletion_counts=results_final["full_deletion_counts_b"], 
-            full_insertion_counts=results_final["full_insertion_counts_b"], 
-            full_substitution_counts=results_final["full_substitution_counts_b"], 
-            full_edit_counts=results_final["full_edit_counts_b"], 
-            full_total_counts=results_final["full_total_counts"], 
-            # ins_start=ins_start,
-            # del_end=del_end, 
-            recoding_mode=recoding_mode, 
-            run_label="b", 
-            del_len=del_len, 
-            ins_len=ins_len, 
-            fig_root=twinpe_8cat_results_folder, 
-            produce_png=produce_png, 
-            category_colors=CATEGORY_COLORS
-        )
+        # Likely do not need this extra plot since arrays are currently identical for a and b
+        # plot_editing_summary(
+        #     full_deletion_counts=results_final["full_deletion_counts_b"], 
+        #     full_insertion_counts=results_final["full_insertion_counts_b"], 
+        #     full_substitution_counts=results_final["full_substitution_counts_b"], 
+        #     full_edit_counts=results_final["full_edit_counts_b"], 
+        #     full_total_counts=results_final["full_total_counts"], 
+        #     # ins_start=ins_start,
+        #     # del_end=del_end, 
+        #     recoding_mode=recoding_mode, 
+        #     run_label="b", 
+        #     del_len=del_len, 
+        #     ins_len=ins_len, 
+        #     fig_root=twinpe_8cat_results_folder, 
+        #     produce_png=produce_png, 
+        #     category_colors=CATEGORY_COLORS
+        # )
 
     # plot_nonprogrammed_edit_counts(
     #     results["full_deletion_counts"],
@@ -1026,7 +1046,9 @@ def categorize_alleles(crispresso_output_folder=None, comp_ref_seq=None,  wt_aln
         "ins_start": ins_start, 
         "ins_end": ins_end, 
         "ins_region_len": ins_region_len, 
-        "del_region_len": del_region_len
+        "del_region_len": del_region_len,
+        "insert_sequence": comp_ref_seq[ins_start:ins_end+1], 
+        "deletion_insertion_sequence": comp_ref_seq[del_start:ins_end+1]
     }
 
 def analyze_collapsed_categorized_alleles(
@@ -2260,156 +2282,225 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
 #         plt.savefig(fig_root + "/Summary_barplot_stacked.png")
 
 
-def plot_successful_twin_edit_counts_by_category(
-    # bp_changes_arr,
-    edit_counts,
-    cat_perfect_pe_count_arr,
-    cat_left_flap_count_arr,
-    cat_right_flap_count_arr,
-    cat_imperfect_pe_count_arr,
-    # cat_imperfect_wt_count_arr,
-    cat_pe_indels_count_arr,
-    # cat_wt_indel_count_arr,
-    # cat_wt_count_arr,
-    # cat_uncategorized_count_arr,
-    # ins_start, 
-    # ins_end,
-    fig_root=None,
-    produce_png=False, 
-    category_colors=None, 
-    recoding_mode=False
-    ):
+# def plot_successful_twin_edit_counts_by_category(
+#     # bp_changes_arr,
+#     edit_counts,
+#     cat_perfect_pe_count_arr,
+#     cat_left_flap_count_arr,
+#     cat_right_flap_count_arr,
+#     cat_imperfect_pe_count_arr,
+#     # cat_imperfect_wt_count_arr,
+#     cat_pe_indels_count_arr,
+#     # cat_wt_indel_count_arr,
+#     # cat_wt_count_arr,
+#     # cat_uncategorized_count_arr,
+#     # ins_start, 
+#     # ins_end,
+#     fig_root=None,
+#     produce_png=False, 
+#     category_colors=None, 
+#     recoding_mode=False
+#     ):
 
-    # Indices for the x-axis
-    indices = np.arange(len(edit_counts))
+#     # Indices for the x-axis
+#     indices = np.arange(len(edit_counts))
 
-    # Plotting
-    fig, ax = plt.subplots(figsize=(14, 6))
+#     # Plotting
+#     fig, ax = plt.subplots(figsize=(14, 6))
 
-    # This is actually the only stacked bar plot - none of the others are stacked
-    # Stacked bar plot
-    ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect PE", color=category_colors["Perfect PE"])
-    bottom_so_far = cat_perfect_pe_count_arr
+#     # This is actually the only stacked bar plot - none of the others are stacked
+#     # Stacked bar plot
+#     ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect PE", color=category_colors["Perfect PE"])
+#     bottom_so_far = cat_perfect_pe_count_arr
 
-    ax.bar(indices, cat_left_flap_count_arr, label="Left Flap", color=category_colors["Left Flap"], bottom=bottom_so_far)
-    bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_left_flap_count_arr)]
+#     ax.bar(indices, cat_left_flap_count_arr, label="Left Flap", color=category_colors["Left Flap"], bottom=bottom_so_far)
+#     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_left_flap_count_arr)]
 
-    ax.bar(indices, cat_right_flap_count_arr, label="Right Flap", color=category_colors["Right Flap"], bottom=bottom_so_far)
-    bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_right_flap_count_arr)]
+#     ax.bar(indices, cat_right_flap_count_arr, label="Right Flap", color=category_colors["Right Flap"], bottom=bottom_so_far)
+#     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_right_flap_count_arr)]
 
-    ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect PE", color=category_colors["Imperfect PE"], bottom=bottom_so_far)
-    bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_pe_count_arr)]
+#     ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect PE", color=category_colors["Imperfect PE"], bottom=bottom_so_far)
+#     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_pe_count_arr)]
     
-    ax.bar(indices, cat_pe_indels_count_arr, label="PE Indel", color=category_colors["PE Indel"], bottom=bottom_so_far)
-    bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_pe_indels_count_arr)]
+#     ax.bar(indices, cat_pe_indels_count_arr, label="PE Indel", color=category_colors["PE Indel"], bottom=bottom_so_far)
+#     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_pe_indels_count_arr)]
 
-    # By definition these cannot have any 'successful twin edits' so not including
-    # ax.bar(indices, cat_imperfect_wt_count_arr, label="Imperfect WT", bottom=bottom_so_far)
-    # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_wt_count_arr)]
+#     # By definition these cannot have any 'successful twin edits' so not including
+#     # ax.bar(indices, cat_imperfect_wt_count_arr, label="Imperfect WT", bottom=bottom_so_far)
+#     # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_wt_count_arr)]
 
-    # ax.bar(indices, cat_wt_indel_count_arr, label="WT Indels", bottom=bottom_so_far)
-    # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_wt_indel_count_arr)]
+#     # ax.bar(indices, cat_wt_indel_count_arr, label="WT Indels", bottom=bottom_so_far)
+#     # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_wt_indel_count_arr)]
 
-    # ax.bar(indices, cat_wt_count_arr, label="WT", bottom=bottom_so_far)
-    # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_wt_count_arr)]
+#     # ax.bar(indices, cat_wt_count_arr, label="WT", bottom=bottom_so_far)
+#     # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_wt_count_arr)]
 
-    # ax.bar(indices, cat_uncategorized_count_arr, label="Uncategorized", bottom=bottom_so_far)
-    # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_uncategorized_count_arr)]
+#     # ax.bar(indices, cat_uncategorized_count_arr, label="Uncategorized", bottom=bottom_so_far)
+#     # bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_uncategorized_count_arr)]
 
-    # Adding labels and title
-    ax.set_ylabel("Read Counts")
-    if recoding_mode:
-        ax.set_xlabel("Recoded Position")
-        # ax.set_title("Stacked Per-Position Twin Prime Editing Across Substitutions by Category")
-    else:
-        ax.set_xlabel("Insert Position")
-        # ax.set_title("Stacked Per-Position Twin Prime Editing Across Edit Insert by Category")
+#     # Adding labels and title
+#     ax.set_ylabel("Read Counts")
+#     if recoding_mode:
+#         ax.set_xlabel("Recoded Position")
+#         # ax.set_title("Stacked Per-Position Twin Prime Editing Across Substitutions by Category")
+#     else:
+#         ax.set_xlabel("Insert Position")
+#         # ax.set_title("Stacked Per-Position Twin Prime Editing Across Edit Insert by Category")
 
-    # ax.set_title("Successful Twin Edit Counts by Category")
+#     # ax.set_title("Successful Twin Edit Counts by Category")
 
-    ax.set_xticks(indices)
-    # if ins_start and ins_end:
-    #     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-    # else:
-    #     ax.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
+#     ax.set_xticks(indices)
+#     # if ins_start and ins_end:
+#     #     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
+#     # else:
+#     #     ax.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
 
 
-    # Dynamic? >35 x-tick = font 8 & rotate 45
-    ax.tick_params(axis="x", rotation=45, labelsize=7)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.legend()
-    plt.tight_layout()
+#     # Dynamic? >35 x-tick = font 8 & rotate 45
+#     ax.tick_params(axis="x", rotation=45, labelsize=7)
+#     ax.spines['top'].set_visible(False)
+#     ax.spines['right'].set_visible(False)
+#     ax.legend()
+#     plt.tight_layout()
     
-    # plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.pdf", bbox_inches='tight')
-    # if produce_png:
-    plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.png", bbox_inches='tight', dpi=300)
+#     # plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.pdf", bbox_inches='tight')
+#     # if produce_png:
+#     plt.savefig(fig_root + "/a4.TPE_counts_by_category_stacked.png", bbox_inches='tight', dpi=300)
 
 
 def plot_total_read_counts(
-    # bp_changes_arr,
     total_counts,
     edit_counts,
     from_right_all_edit_counts,
     from_left_all_edit_counts,
-    perfect_edit_counts,
-    # deletion_counts,
-    # insertion_counts,
-    # substitution_counts,
-    # ins_start, 
-    # ins_end, 
+    perfect_edit_counts, 
+    insert_sequence,
     recoding_mode=False, 
     fig_root=None,
     produce_png=False, 
-    category_colors=None, 
+    category_colors=None
 ):
+    n = len(insert_sequence)
+    indices = np.arange(n)
+    bar_width = 0.85
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
+    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
-    # Indices for the x-axis
-    indices = np.arange(len(edit_counts))
+    ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous TPEs From Right", alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous TPEs From Left", alpha=0.7)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
 
-    # Plotting
-    fig, ax = plt.subplots(figsize=(14, 6))
+    ax.set_title("All Reads", fontsize=14)
+    ax.set_ylabel("Read Counts", fontsize=12)
 
-    # total number of alleles at each position
-    ax.bar(indices, total_counts, label="Total Reads", color=category_colors["PE Indel"], alpha=1.0)
-    # number of alleles with "T"s at each position
-    ax.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
-    # number of alleles with continuous "T"s from right at each position
-    ax.bar(indices, from_right_all_edit_counts, color=category_colors["Right Flap"], label="Continuous TPEs From Right", alpha=1.0)
-    # number of alleles with continuous "T"s from left at each position
-    ax.bar(indices, from_left_all_edit_counts, color=category_colors["Left Flap"], label="Continuous TPEs From Left", alpha=0.75)
-    # this perfect_PE seems out of place for this plot?
-    # number of perfect_PE alleles at each position - changed above to support indels - is this wanted?
-    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
-    # # number of alleles with "D"s at each position
-    # ax.bar(indices, deletion_counts, label="Deletions")
-    # # number of alleles with "I"s at each position
-    # ax.bar(indices, insertion_counts, label="Insertions")
-    # # number of alleles with "S"s at each position
-    # ax.bar(indices, substitution_counts, label="Substitutions")
+    max_height = max(total_counts)
 
-    # Adding labels and title
-    # ax.set_xlabel('Compound Reference Index')
-    ax.set_ylabel('Read Counts')
-    # ax.set_title("Edit Counts")
-    # ax.set_title("Per-Position Twin Prime Editing Across Inserted Region - All Reads")
-    ax.set_title("All Reads")
+    gap_inches = 0.08
+    rect_height_inches = 0.25
+    fig_height_in = fig.get_size_inches()[1]
+    ax_pos = ax.get_position()
+    ax_height_in = fig_height_in * ax_pos.height
+
+    gap_data = gap_inches / ax_height_in * max_height
+    rect_height = rect_height_inches / ax_height_in * max_height
+    y_base = -(gap_data + rect_height)
+
+    for i, base in enumerate(insert_sequence):
+        rect = patches.Rectangle(
+            (i - bar_width/2, y_base),
+            bar_width,
+            rect_height,
+            facecolor=BASE_COLORS.get(base, "#ffffff"),
+            edgecolor="none",
+            clip_on=False
+        )
+        ax.add_patch(rect)
+        ax.text(
+            i,
+            y_base + rect_height/2,
+            base,
+            ha="center",
+            va="center",
+            fontsize=12,
+            clip_on=False
+        )
+
+    region_gap_inches = 0.05
+    region_height_inches = 0.12
+    label_gap_inches = 0.04
+
+    region_gap_data = region_gap_inches / ax_height_in * max_height
+    region_height = region_height_inches / ax_height_in * max_height
+    label_gap_data = label_gap_inches / ax_height_in * max_height
+    y_region = y_base - region_gap_data - region_height
+
     if recoding_mode:
-        ax.set_xlabel("Recoded Position")
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Recoded",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
     else:
-        ax.set_xlabel("Insert Position")
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Insertion",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
 
-    ax.set_xticks(indices)
-    # if ins_start and ins_end:
-    #     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-    # else:
-    #     ax.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
-    # Dynamic? >35 x-tick = font 8 & rotate 45
-    ax.tick_params(axis="x", labelsize=7, rotation=45)
+    spine_gap = bar_width / 2 + 0.15
+    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+    # ax.set_ylim(y_region, max_height * 1.05)
+    ax.set_ylim(0, max_height * 1.05)
+
+    ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.legend()
-    plt.tight_layout()
+
+    ax.set_xticks([])
+    ax.tick_params(axis='x', length=0)
+
+    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=12
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     # plt.savefig(fig_root + "/a5.TPE_profile_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
@@ -2417,58 +2508,139 @@ def plot_total_read_counts(
 
 
 def plot_edit_read_counts(
-    # bp_changes_arr,
     edit_counts,
     from_right_all_edit_counts,
     from_left_all_edit_counts,
-    perfect_edit_counts,
-    # deletion_counts,
-    # insertion_counts,
-    # substitution_counts,
-    # ins_start, 
-    # ins_end, 
+    perfect_edit_counts, 
+    insert_sequence, 
     recoding_mode=False, 
     fig_root=None,
     produce_png=False, 
     category_colors=None
 ):
-
-    # Indices for the x-axis
-    indices = np.arange(len(edit_counts))
-
-    # Plotting
-    fig, ax = plt.subplots(figsize=(14, 6))
+    n = len(insert_sequence)
+    indices = np.arange(n)
+    bar_width = 0.85
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
+    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     # Stacked bar plot
-    ax.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right", color=category_colors["Right Flap"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left", color=category_colors["Left Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
-    # ax.bar(indices, deletion_counts, label="Deletions")
-    # ax.bar(indices, insertion_counts, label="Insertions")
-    # ax.bar(indices, substitution_counts, label="Substitutions")
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous TPEs From Right", color=category_colors["Right Flap"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous TPEs From Left", color=category_colors["Left Flap"], alpha=0.75)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
 
-    # Adding labels and title
-    # ax.set_xlabel("Compound Reference Index")
-    ax.set_ylabel("Read Counts")
-    # ax.set_title("Successful Twin Edit Counts")
-    ax.set_title("Edited Reads")
-    if recoding_mode:
-        ax.set_xlabel("Recoded Position")
-    else:
-        ax.set_xlabel("Insert Position")
+    ax.set_title("Edited Reads", fontsize=14)
+    ax.set_ylabel("Read Counts", fontsize=12)
 
     ax.set_xticks(indices)
-    # if ins_start and ins_end:
-    #     ax.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-    # else:
-    #     ax.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
-    # Dynamic? >35 x-tick = font 8 & rotate 45
-    ax.tick_params(axis="x", rotation=45, labelsize=7)
-    ax.legend(loc='lower right')
+
+    max_height = max(edit_counts)
+
+    gap_inches = 0.08
+    rect_height_inches = 0.25
+    fig_height_in = fig.get_size_inches()[1]
+    ax_pos = ax.get_position()
+    ax_height_in = fig_height_in * ax_pos.height
+
+    gap_data = gap_inches / ax_height_in * max_height
+    rect_height = rect_height_inches / ax_height_in * max_height
+    y_base = -(gap_data + rect_height)
+
+    for i, base in enumerate(insert_sequence):
+        rect = patches.Rectangle(
+            (i - bar_width/2, y_base),
+            bar_width,
+            rect_height,
+            facecolor=BASE_COLORS.get(base, "#ffffff"),
+            edgecolor="none",
+            clip_on=False
+        )
+        ax.add_patch(rect)
+        ax.text(
+            i,
+            y_base + rect_height/2,
+            base,
+            ha="center",
+            va="center",
+            fontsize=12,
+            clip_on=False
+        )
+
+    region_gap_inches = 0.05
+    region_height_inches = 0.12
+    label_gap_inches = 0.04
+
+    region_gap_data = region_gap_inches / ax_height_in * max_height
+    region_height = region_height_inches / ax_height_in * max_height
+    label_gap_data = label_gap_inches / ax_height_in * max_height
+    y_region = y_base - region_gap_data - region_height
+
+    if recoding_mode:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Recoded",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+    else:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Insertion",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+
+    spine_gap = bar_width / 2 + 0.15
+    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+    # ax.set_ylim(y_region, max_height * 1.05)
+    ax.set_ylim(0, max_height * 1.05)
+
+    ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    plt.tight_layout()
+
+    ax.set_xticks([])
+    ax.tick_params(axis='x', length=0)
+
+    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=12
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     # plt.savefig(fig_root + "/a6.TPE_profile_edited_reads.pdf", bbox_inches='tight')
     # if produce_png:
@@ -2482,18 +2654,106 @@ def plot_edit_read_counts_with_indels(
     from_right_all_edit_counts_with_indels,
     from_left_all_edit_counts,
     from_left_all_edit_counts_with_indels,
+    insert_sequence,
     recoding_mode=False,
     fig_root=None,
     produce_png=False,
     category_colors=None
 ):
 
-    indices = np.arange(len(edit_counts))
+    n = len(insert_sequence)
+    indices = np.arange(n)
+    bar_width = 0.85
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
 
-    x_label = "Recoded Position" if recoding_mode else "Insert Position"
+    def add_sequence_track(ax, max_height):
 
-    # Total TPEs vs TPEs with Indels
-    fig1, ax1 = plt.subplots(figsize=(14, 6))
+        gap_inches = 0.08
+        rect_height_inches = 0.25
+        region_gap_inches = 0.05
+        region_height_inches = 0.12
+        label_gap_inches = 0.04
+
+        fig_height_in = ax.figure.get_size_inches()[1]
+        ax_pos = ax.get_position()
+        ax_height_in = fig_height_in * ax_pos.height
+
+        gap_data = gap_inches / ax_height_in * max_height
+        rect_height = rect_height_inches / ax_height_in * max_height
+        region_gap_data = region_gap_inches / ax_height_in * max_height
+        region_height = region_height_inches / ax_height_in * max_height
+        label_gap_data = label_gap_inches / ax_height_in * max_height
+
+        y_base = -(gap_data + rect_height)
+
+        for i, base in enumerate(insert_sequence):
+            rect = patches.Rectangle(
+                (i - bar_width/2, y_base),
+                bar_width,
+                rect_height,
+                facecolor=BASE_COLORS.get(base, "#ffffff"),
+                edgecolor="none",
+                clip_on=False
+            )
+            ax.add_patch(rect)
+
+            ax.text(
+                i,
+                y_base + rect_height/2,
+                base,
+                ha="center",
+                va="center",
+                fontsize=10,
+                clip_on=False
+            )
+
+        y_region = y_base - region_gap_data - region_height
+
+        rect_left = 0 - bar_width/2
+        rect_width = (n - 1) + bar_width
+
+        ax.add_patch(patches.Rectangle(
+            (rect_left, y_region),
+            rect_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+
+        label_text = "Recoded" if recoding_mode else "Insertion"
+
+        ax.text(
+            (n - 1) / 2,
+            y_region - label_gap_data,
+            label_text,
+            ha="center",
+            va="top",
+            fontsize=12,
+            clip_on=False
+        )
+
+        # ax.set_ylim(y_region, max_height * 1.05)
+        ax.set_ylim(0, max_height * 1.05)
+
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        ax.set_xticks([])
+        ax.tick_params(axis='x', length=0)
+
+        ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+        ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+        ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+        spine_gap = bar_width / 2 + 0.15
+        ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+
+
+    # Total TPEs
+    fig1, ax1 = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax1.bar(indices, edit_counts,
             label="Total TPEs",
@@ -2503,21 +2763,25 @@ def plot_edit_read_counts_with_indels(
             label="TPEs with Indels",
             color=category_colors["WT"])
 
-    ax1.set_ylabel("Read Counts")
-    ax1.set_xlabel(x_label)
-    ax1.set_xticks(indices)
-    ax1.tick_params(axis="x", rotation=45, labelsize=7)
-    ax1.spines["top"].set_visible(False)
-    ax1.spines["right"].set_visible(False)
-    ax1.legend()
+    ax1.set_ylabel("Read Counts", fontsize=12)
+    max_height = max(edit_counts + edit_counts_with_indels)
 
-    plt.tight_layout()
+    add_sequence_track(ax1, max_height)
+
+    ax1.legend(loc="upper center",
+               bbox_to_anchor=(0.5, -0.14),
+               ncol=2,
+               frameon=False,
+               fontsize=12)
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig(f"{fig_root}/a7.Total_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig1)
 
-    # Continuous TPEs From Left
-    fig2, ax2 = plt.subplots(figsize=(14, 6))
+
+    # Continuous From Left
+    fig2, ax2 = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax2.bar(indices, from_left_all_edit_counts,
             label="Continuous TPEs From Left",
@@ -2528,21 +2792,26 @@ def plot_edit_read_counts_with_indels(
             label="Continuous TPEs From Left with Indels",
             color=category_colors["WT"])
 
-    ax2.set_ylabel("Read Counts")
-    ax2.set_xlabel(x_label)
-    ax2.set_xticks(indices)
-    ax2.tick_params(axis="x", rotation=45, labelsize=7)
-    ax2.spines["top"].set_visible(False)
-    ax2.spines["right"].set_visible(False)
-    ax2.legend()
+    ax2.set_ylabel("Read Counts", fontsize=12)
+    max_height = max(from_left_all_edit_counts +
+                     from_left_all_edit_counts_with_indels)
 
-    plt.tight_layout()
+    add_sequence_track(ax2, max_height)
+
+    ax2.legend(loc="upper center",
+               bbox_to_anchor=(0.5, -0.14),
+               ncol=2,
+               frameon=False,
+               fontsize=12)
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig(f"{fig_root}/a8.Left_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig2)
 
-    # Continuous TPEs From Right
-    fig3, ax3 = plt.subplots(figsize=(14, 6))
+
+    # Continuous From Right
+    fig3, ax3 = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax3.bar(indices, from_right_all_edit_counts,
             label="Continuous TPEs From Right",
@@ -2553,134 +2822,22 @@ def plot_edit_read_counts_with_indels(
             label="Continuous TPEs From Right with Indels",
             color=category_colors["WT"])
 
-    ax3.set_ylabel("Read Counts")
-    ax3.set_xlabel(x_label)
-    ax3.set_xticks(indices)
-    ax3.tick_params(axis="x", rotation=45, labelsize=7)
-    ax3.spines["top"].set_visible(False)
-    ax3.spines["right"].set_visible(False)
-    ax3.legend()
+    ax3.set_ylabel("Read Counts", fontsize=12)
+    max_height = max(from_right_all_edit_counts +
+                     from_right_all_edit_counts_with_indels)
 
-    plt.tight_layout()
+    add_sequence_track(ax3, max_height)
+
+    ax3.legend(loc="upper center",
+               bbox_to_anchor=(0.5, -0.14),
+               ncol=2,
+               frameon=False,
+               fontsize=12)
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig(f"{fig_root}/a9.Right_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig3)
-
-
-# def plot_edit_read_counts_with_indels(
-#     edit_counts,
-#     # bp_changes_arr,
-#     edit_counts_with_indels,
-#     from_right_all_edit_counts,
-#     from_right_all_edit_counts_with_indels,
-#     from_left_all_edit_counts,
-#     from_left_all_edit_counts_with_indels,
-#     # ins_start, 
-#     # ins_end, 
-#     recoding_mode=False, 
-#     fig_root=None,
-#     produce_png=False, 
-#     category_colors=None
-# ):
-
-#     # Indices for the x-axis
-#     indices = np.arange(len(edit_counts))
-
-#     # Plotting
-#     fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 18))
-
-#     # Stacked bar plot
-#     # number of "T"s at each position
-#     ax1.bar(indices, edit_counts, label="Total TPEs", color=category_colors["Perfect PE"])
-#     # number of "T"s at each position for match_arr's that have indels
-#     ax1.bar(
-#         indices, edit_counts_with_indels, label="TPEs with Indels", color=category_colors["WT"]
-#     )
-
-#     # Adding labels and title
-#     # ax1.set_xlabel('Compound Reference Index')
-#     ax1.set_ylabel('Read Counts')
-#     # ax1.set_title('Per-Position Twin Prime Editing With and Without Indels Across Inserted Region')
-#     if recoding_mode:
-#         ax1.set_xlabel("Recoded Position")
-#     else:
-#         ax1.set_xlabel("Insert Position")
-
-#     ax1.set_xticks(indices)
-#     # if ins_start and ins_end:
-#     #     ax1.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-#     # else:
-#     #     ax1.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
-#     ax1.tick_params(axis="x", labelsize=7)
-#     ax1.spines['top'].set_visible(False)
-#     ax1.spines['right'].set_visible(False)
-#     ax1.legend()
-
-#     # Stacked bar plot
-#     # number of continuous "T"s from left at each position
-#     ax2.bar(indices, from_left_all_edit_counts, label="Continuous TPEs From Left", color=category_colors["Left Flap"])
-#     # number of continuous "T"s from left at each position for match_arr's that have indels
-#     ax2.bar(
-#         indices,
-#         from_left_all_edit_counts_with_indels,
-#         label="Continuous TPEs From Left with Indels", 
-#         color=category_colors["WT"]
-#     )
-
-#     # Adding labels and title
-#     # ax2.set_xlabel('Compound Reference Index')
-#     ax2.set_ylabel('Read Counts')
-#     # ax2.set_title('Twin Edit From Left Counts')
-#     if recoding_mode:
-#         ax2.set_xlabel("Recoded Position")
-#     else:
-#         ax2.set_xlabel("Insert Position")
-
-#     ax2.set_xticks(indices)
-#     # if ins_start and ins_end:
-#     #     ax2.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-#     # else:
-#     #     ax2.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
-#     ax2.tick_params(axis="x", labelsize=7)
-#     ax2.spines['top'].set_visible(False)
-#     ax2.spines['right'].set_visible(False)
-#     ax2.legend()
-
-#     # Stacked bar plot
-#     # number of continuous "T"s from right at each position
-#     ax3.bar(indices, from_right_all_edit_counts, label="Continuous TPEs From Right", color=category_colors["Right Flap"])
-#     # number of continuous "T"s from right at each position for match_arr's that have indels
-#     ax3.bar(
-#         indices,
-#         from_right_all_edit_counts_with_indels,
-#         label="Continuous TPEs From Right with Indels", 
-#         color=category_colors["WT"]
-#     )
-
-#     # Adding labels and title
-#     # ax3.set_xlabel('Compound Reference Index')
-#     ax3.set_ylabel('Read Counts')
-#     # ax3.set_title('Twin Edit From Right Counts')
-#     if recoding_mode:
-#         ax3.set_xlabel("Recoded Position")
-#     else:
-#         ax3.set_xlabel("Insert Position")
-
-#     ax3.set_xticks(indices)
-#     # if ins_start and ins_end:
-#     #     ax3.set_xticklabels([str(x) for x in range(ins_start, ins_end+1)], rotation=45, ha="center")
-#     # else:
-#     #     ax3.set_xticklabels([str(x) for x in indices], rotation=45, ha="center")
-#     # Dynamic? >35 x-tick = font 8 & rotate 45
-#     ax3.tick_params(axis="x", rotation=45, labelsize=7)
-#     ax3.spines['top'].set_visible(False)
-#     ax3.spines['right'].set_visible(False)
-#     ax3.legend()
-#     plt.tight_layout()
-
-#     # plt.savefig(fig_root + "/a7.TPEs_vs_indels.pdf", bbox_inches='tight')
-#     # if produce_png:
-#     plt.savefig(fig_root + "/a7.TPEs_vs_indels.png", bbox_inches='tight', dpi=300)
 
 
 def plot_editing_summary(
@@ -2689,10 +2846,7 @@ def plot_editing_summary(
         full_substitution_counts, 
         full_edit_counts, 
         full_total_counts, 
-        # ins_start=None, 
-        # ins_end=None, 
-        # del_start=None, 
-        # del_end=None, 
+        deletion_insertion_sequence,
         del_len=None, 
         ins_len=None, 
         recoding_mode=False, 
@@ -2701,90 +2855,194 @@ def plot_editing_summary(
         produce_png=False, 
         category_colors=None
     ):
-    x = np.arange(len(full_deletion_counts))
-    w = 0.27
-    # determine if plotting A, B, or recoding
-    # if del_start:
-    #     x_labels = [str(x) for x in range(del_start, ins_end+1)]
-    # elif ins_start:
-    #     x_labels = [str(x) for x in range(ins_start, del_end+1)]
-    # if recoding_mode:
-    #     x_labels = [str(x) for x in range(len(full_deletion_counts))]
-    # else:
-    #     x_labels = [str(x) for x in range(del_start, ins_end+1)]
 
-    misedit_counts = np.array(full_deletion_counts) + np.array(full_insertion_counts) + np.array(full_substitution_counts)
-    unedited_counts = np.array(full_total_counts) - np.array(full_edit_counts) - np.array(misedit_counts)
-    misedit_counts = misedit_counts.tolist()
-    unedited_counts = unedited_counts.tolist()
+    n = len(full_total_counts)
+    x = np.arange(n)
 
-    fig, ax = plt.subplots(figsize=(16,4), dpi=300)
+    bar_width = 0.25
+    group_width = 0.8
+    offset = bar_width
 
-    ax.bar(x - w, full_edit_counts, width=w, label="Edited", color=category_colors["Perfect PE"])
-    ax.bar(x, unedited_counts, width=w, label="Unedited", color=category_colors["Left Flap"])
-    ax.bar(x + w, misedit_counts, width=w, label="Misedited", color=category_colors["Right Flap"])
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
 
-    # title_suffix = ""
+    fig, ax = plt.subplots(figsize=(fig_width, 6), dpi=300)
 
-    if (not recoding_mode) and (del_len is not None) and (ins_len is not None) and run_label in ["a", "b"]:
+    misedit_counts = (
+        np.array(full_deletion_counts)
+        + np.array(full_insertion_counts)
+        + np.array(full_substitution_counts)
+    )
 
+    unedited_counts = (
+        np.array(full_total_counts)
+        - np.array(full_edit_counts)
+        - misedit_counts
+    )
+
+    max_height = max(full_edit_counts)
+
+    ax.bar(x - offset, full_edit_counts, width=bar_width,
+           label="Edited", color=category_colors["Perfect PE"])
+
+    ax.bar(x, unedited_counts, width=bar_width,
+           label="Unedited", color=category_colors["Left Flap"])
+
+    ax.bar(x + offset, misedit_counts, width=bar_width,
+           label="Misedited", color=category_colors["Right Flap"])
+
+    gap_inches = 0.08
+    rect_height_inches = 0.25
+
+    ax_height_in = fig.get_figheight() * ax.get_position().height
+
+    gap_data = gap_inches / ax_height_in * max_height
+    rect_height = rect_height_inches / ax_height_in * max_height
+
+    y_base = -(gap_data + rect_height)
+
+    for i, base in enumerate(deletion_insertion_sequence):
+
+        rect = patches.Rectangle(
+            (i - group_width/2, y_base),
+            group_width,
+            rect_height,
+            facecolor=BASE_COLORS.get(base, "#ffffff"),
+            edgecolor="none",
+            clip_on=False
+        )
+        ax.add_patch(rect)
+
+        ax.text(
+            i,
+            y_base + rect_height/2,
+            base,
+            ha="center",
+            va="center",
+            fontsize=10,
+            clip_on=False
+        )
+
+    region_gap_inches = 0.05
+    region_height_inches = 0.12
+    label_gap_inches = 0.04
+
+    region_gap_data = region_gap_inches / ax_height_in * max_height
+    region_height = region_height_inches / ax_height_in * max_height
+    label_gap_data = label_gap_inches / ax_height_in * max_height
+
+    y_region = y_base - region_gap_data - region_height
+
+    if recoding_mode:
+        rec_start = 0
+        rec_end = n - 1
+
+        ax.add_patch(patches.Rectangle(
+            (rec_start - group_width/2, y_region),
+            (rec_end - rec_start) + group_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+
+        ax.text(
+            (rec_start + rec_end) / 2,
+            y_region - label_gap_data,
+            "Recoded",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+
+    # elif (not recoding_mode) and (del_len is not None) and (ins_len is not None) and run_label in ["a", "b"]:
+    else:
         if run_label == "a":
             del_start = 0
             del_end = del_len - 1
             ins_start = del_len
             ins_end = del_len + ins_len - 1
-            boundary = del_len - 0.5
-            # title_suffix = " (Deletion → Insertion)"
         else:
             ins_start = 0
             ins_end = ins_len - 1
             del_start = ins_len
             del_end = ins_len + del_len - 1
-            boundary = ins_len - 0.5
-            # title_suffix = " (Insertion → Deletion)"
 
-        ymax = ax.get_ylim()[1]
+        ax.add_patch(patches.Rectangle(
+            (del_start - group_width/2, y_region),
+            (del_end - del_start) + group_width,
+            region_height,
+            facecolor="#767676",
+            edgecolor="none",
+            clip_on=False
+        ))
 
-        region_y = ymax * 1.06
-        text_y = ymax * 1.10
+        ax.text(
+            (del_start + del_end) / 2,
+            y_region - label_gap_data,
+            "Deletion",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
 
-        # Deletion bar
-        ax.plot([del_start - 0.5, del_end + 0.5], [region_y, region_y], linewidth=3, color='#767676', solid_capstyle="butt")
-        ax.text((del_start + del_end) / 2, text_y, "Deletion", ha="center", va="bottom", fontsize=9)
+        ax.add_patch(patches.Rectangle(
+            (ins_start - group_width/2, y_region),
+            (ins_end - ins_start) + group_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
 
-        # Insertion bar
-        ax.plot([ins_start - 0.5, ins_end + 0.5], [region_y, region_y], linewidth=3, color='lightgrey', solid_capstyle="butt")
-        ax.text((ins_start + ins_end) / 2, text_y, "Insertion", ha="center", va="bottom", fontsize=9)
+        ax.text(
+            (ins_start + ins_end) / 2,
+            y_region - label_gap_data,
+            "Insertion",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
 
-        # Expand ylim to avoid clipping
-        ax.set_ylim(top=ymax * 1.18)
+    # else:
+    #     y_region = y_base
 
+    spine_gap = group_width / 2 + 0.15
+    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+    # ax.set_ylim(y_region, max_height * 1.05)
 
-    # Show all x-axis labels
-    ax.set_xticks(x)
-    ax.tick_params(axis="x", rotation=45, labelsize=7)
-    ax.tick_params(axis="y", labelsize=8)
-
-    ax.minorticks_on()
-    ax.tick_params(axis="y", which="minor")
-    ax.tick_params(axis="y", which="major")
-    ax.tick_params(axis="x", which="minor", bottom=False)
-
-    # plt.xlabel("TwinPE Edit Index")
-    # plt.xlabel("Compound Reference Index")
-    ax.set_ylabel("Counts", fontsize=9)
-    # plt.title("Per-Position Editing Across Deleted and Inserted Regions")
-    if recoding_mode:
-        ax.set_xlabel("Recoded Position", fontsize=9)
-    else:
-        # ax.set_title("Full Edit")
-        ax.set_xlabel("Edit Position", fontsize=9)
-
-
+    # ax.spines['left'].set_bounds(0, max_height)
+    ax.set_ylim(0, max_height * 1.05)
+    # ax.spines['left'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
-    ax.legend(loc="upper right", bbox_to_anchor=(1, 1.14), fontsize=8)
-    plt.tight_layout()
+
+    ax.set_xticks([])
+    ax.tick_params(axis='x', length=0)
+    # ax.tick_params(axis='y', labelsize=12)
+    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+    ax.set_ylabel("Read Counts", fontsize=12)
+    # ax.set_xlabel("Recoded Position" if recoding_mode else "Edit Position", fontsize=10)
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=3,
+        frameon=False,
+        fontsize=12
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     if recoding_mode:
         # plt.savefig(fig_root + "/a10.Edit_type_summary.pdf", bbox_inches='tight')
@@ -4608,7 +4866,6 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 
     # Custom titles for A/B cards
     ab_titles = {
-        "a10.Edit_type_summary.png": "Editing Summary",
         "b1.Perfect_PE.png": "Perfect TPE Alleles",
         "b2.PE_Indel.png": "TPE Alleles with Indels",
         "b3.Left_Flap.png": "Left Flap TPE Alleles",
@@ -4621,19 +4878,24 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 
     # Single A/B loop using _make_special_group and ab_titles
     for key, lbl_map in ab_pairs.items():
-        ordered_labels = sorted(lbl_map)  # usually ['a','b']
-        files = [lbl_map[l] for l in ordered_labels]
-        button_texts = []
-        for l in ordered_labels:
-            if l == "a":
-                button_texts.append("A")
-            elif l == "b":
-                button_texts.append("B")
-            else:
-                button_texts.append(l.upper())
+        labels_present = sorted(lbl_map.keys())
 
-        title = ab_titles.get(key, key)  # use custom title if present
-        _make_special_group(key, title, files, button_texts)
+        # If both A and B exist → make toggle card
+        if set(labels_present) == {"a", "b"}:
+            files = [lbl_map["a"], lbl_map["b"]]
+            button_texts = ["A", "B"]
+            title = ab_titles.get(key, key)
+            _make_special_group(key, title, files, button_texts)
+
+        # If only one exists → treat as single image card
+        elif len(labels_present) == 1:
+            single_img = lbl_map[labels_present[0]]
+            groups[single_img] = {
+                "title": single_img,
+                "single": single_img,
+            }
+
+        # If none → do nothing
 
     # First special card: a1, a2, a3
     group1_files = [
@@ -4644,23 +4906,24 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
     if all(f in images for f in group1_files):
         _make_special_group(
             "a1-3.summary",
-            "Summaries",
+            "Summary",
             group1_files,
             ["Categories", "Categories stacked", "Reads"],
         )
 
-    # Second special card: a4, a5, a6
+    # Second special card: a5, a6, a10.a
     group2_files = [
         "a5.TPE_profile_all_reads.png",
-        "a6.TPE_profile_edited_reads.png", 
-        "a4.TPE_counts_by_category_stacked.png"
+        "a6.TPE_profile_edited_reads.png",
+        "a10.a.Edit_type_summary.png",
     ]
+
     if all(f in images for f in group2_files):
         _make_special_group(
-            "a4-6.TPE_profiles",
-            "TwinPE Insert Editing",
+            "a5-6-10.TPE_profiles",
+            "Editing Per Base",
             group2_files,
-            ["All reads", "Edited reads", "By category"],
+            ["All reads", "Edited reads", "Editing - Full Region"],
         )
 
     group3_files = [
@@ -4671,9 +4934,9 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
     if all(f in images for f in group3_files):
         _make_special_group(
             "a7-9.TPEs_vs_indels",
-            "TPEs vs Indels",
+            "Indels",
             group3_files,
-            ["Total", "Left", "Right"],
+            ["Total", "From Left", "From Right"],
         )
 
     cards_html = []
