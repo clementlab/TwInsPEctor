@@ -1,5 +1,5 @@
 package:
-  name: twin_prime_editing
+  name: TwInsPEctor
   version: 0.1.0
 
 source:
@@ -19,15 +19,15 @@ requirements:
 
 test:
   imports:
-    - twin_prime_editing
+    - TwInsPEctor
   commands:
     - pytest
 
 about:
-  home: https://github.com/clementlab/twin_prime_editing
+  home: https://github.com/clementlab/TwInsPEctor
   license: MIT
   license_file: LICENSE
-  summary: "A package for twin prime editing analysis."
+  summary: "TwInsPEctor: A tool for twin prime editing analysis."
   description: |
     Tools and scripts for analyzing twin prime editing experiments, including data processing and visualization.
 
