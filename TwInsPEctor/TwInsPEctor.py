@@ -105,7 +105,7 @@ def main():
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        prog="04_twinpe_8cat_compound_crispresso.py",
+        prog="TwInsPEctor",
         description="Analyzes Twin Prime Editing outcomes by running CRISPResso2 on raw fastq sequencing files with alignment to a WT-TwinPE compound reference. Classifies reads into 8 categories and provides detailed visualizations.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
@@ -4598,7 +4598,7 @@ def plot_categorical_allele_tables(
 
 
 # def build_combined_html_report(twinpe_8cat_results_folder,
-#                                html_filename="TwinPE_report.html"):
+#                                html_filename="TwInsPEctor.html"):
 #     """
 #     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
 
@@ -4701,7 +4701,7 @@ def plot_categorical_allele_tables(
 # <html lang="en">
 # <head>
 #   <meta charset="utf-8">
-#   <title>TwinPE Report</title>
+#   <title>TwInsPEctor</title>
 #   <link rel="stylesheet"
 #         href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
 #   <style>
@@ -4748,7 +4748,7 @@ def plot_categorical_allele_tables(
 # <body class="p-4">
 #   <div class="container">
 #     <div class="text-center mb-5">
-#       <h1 class="display-5">TwinPE Report</h1>
+#       <h1 class="display-5">TwInsPEctor</h1>
 #       <p class="text-muted">{html.escape(twinpe_8cat_results_folder)}</p>
 #     </div>
 #     {''.join(cards_html)}
@@ -4818,7 +4818,7 @@ def plot_categorical_allele_tables(
 #     return out_path
 
 
-def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, html_filename="TwinPE_report.html"):
+def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, html_filename="TwInsPEctor.html"):
     """
     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
     """
@@ -5007,7 +5007,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>TwinPE Report</title>
+  <title>TwInsPEctor</title>
   <link rel="stylesheet"
         href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
   <style>
@@ -5034,7 +5034,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
     .report-img {{
       display: block;
       max-width: 100%;
-      max-height: 80vh;
+      max-height: auto;
       height: auto;
       border: 1px solid #e0e0e0;
       border-radius: 4px;
@@ -5056,7 +5056,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 <body class="p-4">
   <div class="container">
     <div class="text-center mb-5">
-      <h1 class="display-5">TwinPE Report</h1>
+      <h1 class="display-5">TwInsPEctor</h1>
       <p class="text-muted report-path">{html.escape(twinpe_8cat_results_folder)}</p>
     </div>
     {''.join(cards_html)}

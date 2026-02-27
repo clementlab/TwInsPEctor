@@ -23,4 +23,4 @@ dependencies = [
 Homepage = "https://github.com/clementlab/TwInsPEctor"
 
 [project.scripts]
-twinpe = "TwInsPEctor.TwInsPEctor:main"
+TwInsPEctor = "TwInsPEctor.TwInsPEctor:main"
