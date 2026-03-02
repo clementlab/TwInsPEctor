@@ -15,11 +15,13 @@ requirements:
     - pip
   run:
     - python >=3.8
-    - bioconda::crispresso2
+    - crispresso2
 
 test:
   imports:
     - TwInsPEctor
+  requires:
+    - pytest
   commands:
     - pytest
 
@@ -31,6 +33,7 @@ about:
   description: |
     Tools and scripts for analyzing twin prime editing experiments, including data processing and visualization.
 
-extra:
+extras:
   authors:
     - name: Nate Masson
+    - name: Kendell Clement
