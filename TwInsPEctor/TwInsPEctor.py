@@ -24,11 +24,11 @@ from matplotlib import colors as colors_mpl
 
 
 CATEGORY_COLORS = {
-    "Perfect PE":  "#1f77b4", 
-    "PE Indel": "#9467bd", 
+    "Perfect TPE":  "#1f77b4", 
+    "TPE Indel": "#9467bd", 
     "Left Flap": "#ff7f0e", 
     "Right Flap": "#2ca02c", 
-    "Imperfect PE": "#d62728", 
+    "Imperfect TPE": "#d62728", 
     "Imperfect WT": "#e377c2", 
     "WT Indel":   "#bcbd22", 
     "WT": "#8c564b", 
@@ -98,27 +98,28 @@ def main():
         analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, crispresso_output_folder_b=crispresso_output_folder_b, args=args, comp_ref_seq_a=comp_ref_seq_a, wt_aln_seq_a=wt_aln_seq_a, twin_aln_seq_a=twin_aln_seq_a, comp_ref_seq_b=comp_ref_seq_b, wt_aln_seq_b=wt_aln_seq_b, twin_aln_seq_b=twin_aln_seq_b, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables) # twinpe_8cat_a_folder, twinpe_8cat_b_folder, 
         print("Finished TwinPE analysis!")
 
-    build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less)
+    build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, parent_folder)
 
     sys.exit(0)
 
 
 def parse_args():
+    prog = 'TwInsPEctor'
     parser = argparse.ArgumentParser(
-        prog="TwInsPEctor",
+        prog=prog,
         description="Analyzes Twin Prime Editing outcomes by running CRISPResso2 on raw fastq sequencing files with alignment to a WT-TwinPE compound reference. Classifies reads into 8 categories and provides detailed visualizations.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
-            "Example: python 04_twinpe_8cat_compound_crispresso.py "
+            f'Example: {prog}'
             "-r1 <fastq R1 file> -r2 <fastq R2 file> "
             "-w <full wildtype sequence> -t <full twinpe sequence> "
             "-g <peg spacer A sequence> <peg spacer B sequence>\n\n"
             "----Category Definitions----\n"
-            "Perfect PE: complete programmed edit without indels anywhere.\n"
-            "PE Indel: complete programmed edit with indels anywhere.\n"
+            "Perfect TPE: complete programmed edit without indels anywhere.\n"
+            "TPE Indel: complete programmed edit with indels anywhere.\n"
             "Left Flap: at least N consecutive programmed bases starting from the left and not from the right.\n"
             "Right Flap: at least N consecutive programmed bases starting from the right and not from the left.\n"
-            "Imperfect PE: incomplete or incorrect programmed edit.\n"
+            "Imperfect TPE: incomplete or incorrect programmed edit.\n"
             "Imperfect WT: some but not all of the wildtype sequence and none of the programmed edit.\n"
             "WT Indel: full wildtype sequence with indels anywhere and none of the programmed edit.\n"
             "WT: full wildtype sequence without indels anywhere and none of the programmed edit.\n"
@@ -126,22 +127,22 @@ def parse_args():
         )
     )
 
-    parser.add_argument("-rm", "--recoding_mode", action="store_true", help="Run in recoding mode when there are only base substitutions.")
     parser.add_argument("-r1", "--fastq_r1", type=str, required=True, help="Path to FASTQ R1 file.")
     parser.add_argument("-r2", "--fastq_r2", type=str, required=False, help="Path to FASTQ R2 file (optional).")
     parser.add_argument("-w", "--wt_seq", type=str, required=True, help="Full wildtype reference amplicon sequence.")
     parser.add_argument("-t", "--twin_seq", type=str, required=True, help="Full TwinPE reference amplicon sequence with 5' & 3' ends identical to wildtype reference amplicon.")
     parser.add_argument("-g", "--peg_spacers", type=str, nargs=2, required=True, help="Space-separated pegRNA spacer sequences: <spacer A> <spacer B>")
     parser.add_argument("-o", "--output_root", type=str, default=None, help="Root output folder for CRISPResso2 and TwinPE 8cat results. If not provided, a folder will be created in the current working directory based on the input fastq file names.")
-    parser.add_argument("-n", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed base edits required for read to be classified as left/right flap allele.")
+    parser.add_argument("-nc", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed bases that must be edited for read to be classified.")
+    parser.add_argument("-rcm", "--recoding_mode", action="store_true", help="Run in recoding mode when there are only base substitutions.")
     parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=50, help="Default minimum homology score for a read to align to the compound reference amplicon")
-    parser.add_argument("-f", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
-    parser.add_argument("--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
+    parser.add_argument("-pfr", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
+    parser.add_argument("-ied", "--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
     parser.add_argument("-nat", "--no_allele_tables", action="store_true", help="Decrease run time when allele table are not wanted.")
-    parser.add_argument("--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
-    parser.add_argument("--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles table plot.")
-    parser.add_argument("--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele table plot.")
-    parser.add_argument("--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
+    parser.add_argument("-pp", "--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
+    parser.add_argument("-mfa", "--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles tables.")
+    parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables .")
+    parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -311,34 +312,6 @@ def build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, sp
             fout.write(f">SpacerB_sequence\n{spacer_b}\n")
 
         return comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b
-
-# def build_compound_reference(wt_seq, twin_seq):
-    # """
-    # Requires that wt_seq and twin_seq share identical 5' and 3' anchor sequences.
-    # """
-#     prefix = ''
-#     for wt_base, twin_base in zip(wt_seq, twin_seq):
-#         if wt_base == twin_base:
-#             prefix += wt_base
-#         else:
-#             break
-#     if prefix == '':
-#         raise ValueError("Could not find matching prefix anchor between provided WT and TwinPE sequences")
-#     suffix = ''
-#     for wt_base, twin_base in zip(wt_seq[::-1], twin_seq[::-1]):
-#         if wt_base == twin_base:
-#             suffix += wt_base
-#         else:
-#             break
-#     if suffix == '':
-#         raise ValueError("Could not find matching suffix anchor between provided WT and TwinPE sequences")
-#     suffix = suffix[::-1]
-
-#     prefix_and_deletion = wt_seq[:wt_seq.find(suffix)]
-#     insertion_and_suffix = twin_seq[len(prefix):]
-#     compound_ref_seq = prefix_and_deletion + insertion_and_suffix
-
-#     return compound_ref_seq
 
 
 def resolve_output_folders(args, recoding_mode=False):
@@ -1015,9 +988,9 @@ def categorize_alleles(crispresso_output_folder=None, comp_ref_seq=None,  wt_aln
         # is_right_flap = all(m == "T" for m in match_arr[-num_changes_to_check:])
 
         if has_all_TE and has_indel:
-            df_alleles.at[idx,'Category'] = "PE_Indel"
+            df_alleles.at[idx,'Category'] = "TPE_Indel"
         elif has_all_TE:
-            df_alleles.at[idx,'Category'] = "Perfect_PE"
+            df_alleles.at[idx,'Category'] = "Perfect_TPE"
         elif has_all_WT and has_indel:
             df_alleles.at[idx,'Category'] = "WT_Indel"
         elif has_all_WT:
@@ -1029,7 +1002,7 @@ def categorize_alleles(crispresso_output_folder=None, comp_ref_seq=None,  wt_aln
         elif has_any_WT and not has_any_TE_in_insertion:
                 df_alleles.at[idx,'Category'] = "Imperfect_WT"
         elif has_any_TE:
-            df_alleles.at[idx,'Category'] = "Imperfect_PE"
+            df_alleles.at[idx,'Category'] = "Imperfect_TPE"
         else:
             df_alleles.at[idx,'Category'] = "Uncategorized"
 
@@ -1187,14 +1160,14 @@ def analyze_collapsed_categorized_alleles(
             allele_counts[match_arr_str] = 0
         allele_counts[match_arr_str] += allele['#Reads']
 
-        if allele['Category'] == "PE_Indel":
+        if allele['Category'] == "TPE_Indel":
             cat_pe_indels_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 # Redundant check
                 # if match == 'T':
                 cat_pe_indels_count_arr[pos_idx] += allele['#Reads']
         
-        elif allele['Category'] == "Perfect_PE":
+        elif allele['Category'] == "Perfect_TPE":
             cat_perfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 # Redundant check
@@ -1234,7 +1207,7 @@ def analyze_collapsed_categorized_alleles(
             #     if match == 'T':
             #         cat_imperfect_wt_count_arr[pos_idx] += allele['#Reads']
 
-        elif allele['Category'] == "Imperfect_PE":
+        elif allele['Category'] == "Imperfect_TPE":
             cat_imperfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
                 if match == 'T':
@@ -1333,9 +1306,9 @@ def analyze_collapsed_categorized_alleles(
         "Imperfect WT": cat_imperfect_wt_count,
         "Left Flap": cat_left_flap_count,
         "Right Flap": cat_right_flap_count,
-        "Perfect PE": cat_perfect_pe_count,
-        "Imperfect PE": cat_imperfect_pe_count,
-        "PE Indel": cat_pe_indels_count,
+        "Perfect TPE": cat_perfect_pe_count,
+        "Imperfect TPE": cat_imperfect_pe_count,
+        "TPE Indel": cat_pe_indels_count,
         "Uncategorized": cat_uncategorized_count,
     }
 
@@ -1346,7 +1319,7 @@ def analyze_collapsed_categorized_alleles(
             fc = c.replace("_", " ")            
             fout.write(f"Category: {c}, Total reads: {folder_category_counts[fc]}\n")
             for i, row in df_alleles_final_a[df_alleles_final_a['Category'] == c].sort_values(by='#Reads', ascending=False).head(50).iterrows():
-                fout.write(f"Read {i} count: {row['#Reads']}\n")
+                fout.write(f"Read: {i} count: {row['#Reads']} score: {row['Aligned_Reference_Scores']}\n")
                 fout.write(f"{row['Aligned_Sequence']}\n")
                 fout.write(f"{row['Reference_Sequence']}\n")
             fout.write("\n")
@@ -1358,7 +1331,7 @@ def analyze_collapsed_categorized_alleles(
             fc = c.replace("_", " ")            
             fout.write(f"Category: {c}, Total reads: {folder_category_counts[fc]}\n")
             for i, row in df_alleles_final_b[df_alleles_final_b['Category'] == c].sort_values(by='#Reads', ascending=False).head(50).iterrows():
-                fout.write(f"Read {i} count: {row['#Reads']}\n")
+                fout.write(f"Read: {i} count: {row['#Reads']} score: {row['Aligned_Reference_Scores']}\n")
                 fout.write(f"{row['Aligned_Sequence']}\n")
                 fout.write(f"{row['Reference_Sequence']}\n")
             fout.write("\n")
@@ -1423,9 +1396,9 @@ def analyze_collapsed_categorized_alleles(
         fout.write(
             "\t".join(
                 [
-                    "Perfect_PE",
-                    "PE_indels",
-                    "Imperfect_PE",
+                    "Perfect_TPE",
+                    "TPE_indels",
+                    "Imperfect_TPE",
                     "Left_flap",
                     "Right_flap",
                     "Imperfect_WT",
@@ -1658,7 +1631,7 @@ def categorize_analyze_recoding_alleles(
         is_right_flap = all(m == "T" for m in match_arr[-num_changes_to_check:])
 
         if has_all_TE and has_indel:
-            df_alleles.at[idx,'Category'] = "PE_Indel"
+            df_alleles.at[idx,'Category'] = "TPE_Indel"
             cat_pe_indels_count += allele['#Reads']
             for pos_idx, match in zip(range(len(match_arr)), match_arr):
                 # Redundant check
@@ -1666,7 +1639,7 @@ def categorize_analyze_recoding_alleles(
                 cat_pe_indels_count_arr[pos_idx] += allele['#Reads']
         
         elif has_all_TE:
-            df_alleles.at[idx,'Category'] = "Perfect_PE"
+            df_alleles.at[idx,'Category'] = "Perfect_TPE"
             cat_perfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(match_arr)), match_arr):
                 # Redundant check
@@ -1712,7 +1685,7 @@ def categorize_analyze_recoding_alleles(
             #         cat_imperfect_wt_count_arr[pos_idx] += allele['#Reads']
 
         elif has_any_TE:
-            df_alleles.at[idx,'Category'] = "Imperfect_PE"
+            df_alleles.at[idx,'Category'] = "Imperfect_TPE"
             cat_imperfect_pe_count += allele['#Reads']
             for pos_idx, match in zip(range(len(match_arr)), match_arr):
                 if match == 'T':
@@ -1797,9 +1770,9 @@ def categorize_analyze_recoding_alleles(
         "Imperfect WT": cat_imperfect_wt_count,
         "Left Flap": cat_left_flap_count,
         "Right Flap": cat_right_flap_count,
-        "Perfect PE": cat_perfect_pe_count,
-        "Imperfect PE": cat_imperfect_pe_count,
-        "PE Indel": cat_pe_indels_count,
+        "Perfect TPE": cat_perfect_pe_count,
+        "Imperfect TPE": cat_imperfect_pe_count,
+        "TPE Indel": cat_pe_indels_count,
         "Uncategorized": cat_uncategorized_count,
     }
 
@@ -1875,9 +1848,9 @@ def categorize_analyze_recoding_alleles(
         fout.write(
             "\t".join(
                 [
-                    "Perfect_PE",
-                    "PE_indels",
-                    "Imperfect_PE",
+                    "Perfect_TPE",
+                    "TPE_indels",
+                    "Imperfect_TPE",
                     "Left_flap",
                     "Right_flap",
                     "Imperfect_WT",
@@ -2233,55 +2206,6 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
     plt.savefig(fig_root + "/a3.Category_summary.png", bbox_inches='tight', dpi=300)
 
 
-# def plot_stacked_summary_barplot(counts_dict, fig_root=None, produce_png=False):
-#     labels = list(counts_dict.keys())
-#     counts = list(counts_dict.values())
-
-#     sorted_counts_labels = sorted(zip(labels, counts), key=lambda x: x[1], reverse=True)
-#     total = sum(counts)
-#     legend_labels = [f"{lab} ({val/total*100:.1f}%)" for lab, val in sorted_counts_labels]
-#     fig, ax = plt.subplots(figsize=(3.5, 6), dpi=300) # dpi=300
-
-#     x = [0]
-#     bottom = 0
-#     # plot stacked bar
-#     for (lab, val), legend_label in zip(sorted_counts_labels, legend_labels):
-#         ax.bar(
-#             x, val, 
-#             bottom=bottom, 
-#             label=legend_label, 
-#             edgecolor='white',
-#             linewidth=.3
-#         )
-#         bottom += val
-
-#     ax.set_xticks([])
-#     ax.set_ylabel("Counts", fontsize=12)
-
-#     ax.spines['top'].set_visible(False)
-#     ax.spines['right'].set_visible(False)
-
-#     ax.minorticks_on()
-#     ax.tick_params(axis="y", which="minor", length=3, width=0.8)
-#     ax.tick_params(axis="y", which="major", length=5, width=1)
-
-
-#     handles, labels = ax.get_legend_handles_labels()
-#     ax.legend(
-#         handles[::-1], labels[::-1],
-#         bbox_to_anchor=(1, .5),
-#         loc="center left",
-#         borderaxespad=0.25
-#     )
-#     # ax.legend(bbox_to_anchor=(1, .5), loc="center left", borderaxespad=0.25)
-
-#     plt.tight_layout()
-
-#     plt.savefig(fig_root + "/Summary_barplot_stacked.pdf")
-#     if produce_png:
-#         plt.savefig(fig_root + "/Summary_barplot_stacked.png")
-
-
 # def plot_successful_twin_edit_counts_by_category(
 #     # bp_changes_arr,
 #     edit_counts,
@@ -2310,7 +2234,7 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
 
 #     # This is actually the only stacked bar plot - none of the others are stacked
 #     # Stacked bar plot
-#     ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect PE", color=category_colors["Perfect PE"])
+#     ax.bar(indices, cat_perfect_pe_count_arr, label="Perfect TPE", color=category_colors["Perfect TPE"])
 #     bottom_so_far = cat_perfect_pe_count_arr
 
 #     ax.bar(indices, cat_left_flap_count_arr, label="Left Flap", color=category_colors["Left Flap"], bottom=bottom_so_far)
@@ -2319,10 +2243,10 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
 #     ax.bar(indices, cat_right_flap_count_arr, label="Right Flap", color=category_colors["Right Flap"], bottom=bottom_so_far)
 #     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_right_flap_count_arr)]
 
-#     ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect PE", color=category_colors["Imperfect PE"], bottom=bottom_so_far)
+#     ax.bar(indices, cat_imperfect_pe_count_arr, label="Imperfect TPE", color=category_colors["Imperfect TPE"], bottom=bottom_so_far)
 #     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_imperfect_pe_count_arr)]
     
-#     ax.bar(indices, cat_pe_indels_count_arr, label="PE Indel", color=category_colors["PE Indel"], bottom=bottom_so_far)
+#     ax.bar(indices, cat_pe_indels_count_arr, label="TPE Indel", color=category_colors["TPE Indel"], bottom=bottom_so_far)
 #     bottom_so_far = [x + y for x, y in zip(bottom_so_far, cat_pe_indels_count_arr)]
 
 #     # By definition these cannot have any 'successful twin edits' so not including
@@ -2388,12 +2312,12 @@ def plot_total_read_counts(
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
     ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous TPEs From Right", alpha=1.0)
     ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous TPEs From Left", alpha=0.7)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect TPE"], alpha=1.0)
 
-    ax.set_title("All Reads", fontsize=14)
+    # ax.set_title("All Reads", fontsize=14)
     ax.set_ylabel("Read Counts", fontsize=12)
 
     max_height = max(total_counts)
@@ -2449,7 +2373,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Recoded",
+            "Edited Sequence (recoding)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2468,7 +2392,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Insertion",
+            "Edited Sequence (insertion)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2526,12 +2450,12 @@ def plot_edit_read_counts(
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     # Stacked bar plot
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect PE"], alpha=1.0)
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
     ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous TPEs From Right", color=category_colors["Right Flap"], alpha=1.0)
     ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous TPEs From Left", color=category_colors["Left Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect PE"], alpha=1.0)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect TPE"], alpha=1.0)
 
-    ax.set_title("Edited Reads", fontsize=14)
+    # ax.set_title("Edited Reads", fontsize=14)
     ax.set_ylabel("Read Counts", fontsize=12)
 
     ax.set_xticks(indices)
@@ -2589,7 +2513,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Recoded",
+            "Edited Sequence (recoding)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2608,7 +2532,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Insertion",
+            "Edited Sequence (insertion)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2722,7 +2646,7 @@ def plot_edit_read_counts_with_indels(
             clip_on=False
         ))
 
-        label_text = "Recoded" if recoding_mode else "Insertion"
+        label_text = "Recoded Sequence" if recoding_mode else "Edited Sequence"
 
         ax.text(
             (n - 1) / 2,
@@ -2757,7 +2681,7 @@ def plot_edit_read_counts_with_indels(
 
     ax1.bar(indices, edit_counts,
             label="Total TPEs",
-            color=category_colors["Perfect PE"])
+            color=category_colors["Perfect TPE"])
 
     ax1.bar(indices, edit_counts_with_indels,
             label="TPEs with Indels",
@@ -2883,7 +2807,7 @@ def plot_editing_summary(
     max_height = max(full_edit_counts)
 
     ax.bar(x - offset, full_edit_counts, width=bar_width,
-           label="Edited", color=category_colors["Perfect PE"])
+           label="Edited", color=category_colors["Perfect TPE"])
 
     ax.bar(x, unedited_counts, width=bar_width,
            label="Unedited", color=category_colors["Left Flap"])
@@ -2919,7 +2843,7 @@ def plot_editing_summary(
             base,
             ha="center",
             va="center",
-            fontsize=10,
+            fontsize=12,
             clip_on=False
         )
 
@@ -2949,10 +2873,10 @@ def plot_editing_summary(
         ax.text(
             (rec_start + rec_end) / 2,
             y_region - label_gap_data,
-            "Recoded",
+            "Recoded Sequence",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=20,
             color="black",
             clip_on=False
         )
@@ -2982,10 +2906,10 @@ def plot_editing_summary(
         ax.text(
             (del_start + del_end) / 2,
             y_region - label_gap_data,
-            "Deletion",
+            "Endogenous Sequence (deletion)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=22,
             color="black",
             clip_on=False
         )
@@ -3002,10 +2926,10 @@ def plot_editing_summary(
         ax.text(
             (ins_start + ins_end) / 2,
             y_region - label_gap_data,
-            "Insertion",
+            "Edited Sequence (insertion)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=22,
             color="black",
             clip_on=False
         )
@@ -3029,9 +2953,9 @@ def plot_editing_summary(
     # ax.tick_params(axis='y', labelsize=12)
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
 
-    ax.set_ylabel("Read Counts", fontsize=12)
+    ax.set_ylabel("Read Counts", fontsize=22)
     # ax.set_xlabel("Recoded Position" if recoding_mode else "Edit Position", fontsize=10)
 
     ax.legend(
@@ -3039,7 +2963,7 @@ def plot_editing_summary(
         bbox_to_anchor=(0.5, -0.14),
         ncol=3,
         frameon=False,
-        fontsize=12
+        fontsize=22
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
@@ -4120,132 +4044,6 @@ def plot_alleles_heatmap(
     plt.close(fig)
 
 
-# def get_dataframe_allele_region(
-#     df_alleles, pegRNA_intervals, ref_seq, ref_aln_seq, twin_aln_seq, cut_points
-# ):
-#     """
-#     Extract region of interest for plotting allele tables based on pegRNA positions on reference sequence.
-#     Returns modified reference sequence and cut points.
-#     """
-#     #### Previous new method ####
-#     # support single or dual pegRNAs
-#     # if df_alleles.shape[0] == 0:
-#     #     return df_alleles
-#     # if len(pegRNA_intervals) == 2:
-#     #     left_end = max(0, pegRNA_intervals[0][0] - 20)
-#     #     right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 20)
-#     #     cut_points[0] = cut_points[0] - left_end
-#     #     cut_points[1] = cut_points[1] - left_end
-#     # elif len(pegRNA_intervals) == 1:
-#     #     left_end = max(0, pegRNA_intervals[0][0] - 80)
-#     #     right_end = min(len(ref_seq), pegRNA_intervals[0][1] + 80)
-#     #     cut_points = pegRNA_intervals[0][1] - 3
-#     #### End of Previous new method ####
-
-#     #### New method for single and double guide RNAs - don't need to account for single guide RNAs
-#     if df_alleles.shape[0] == 0:
-#         # Return empty frame and pass-through sequences, with None for coords
-#         return df_alleles, ref_seq, ref_aln_seq, twin_aln_seq, cut_points, pegRNA_intervals
-
-#     # Default padding
-#     if len(pegRNA_intervals) == 2:
-#         # left_end  = max(0, pegRNA_intervals[0][0] - 20)
-#         left_end  = max(0, pegRNA_intervals[0][0] - 50)
-#         right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 80)
-#     elif len(pegRNA_intervals) == 1:
-#         # left_end  = max(0, pegRNA_intervals[0][0] - 80)
-#         left_end  = 0
-#         # right_end = min(len(ref_seq), pegRNA_intervals[0][1] + 80)
-#         right_end = len(ref_seq)-1
-#     else:
-#         # Fallback: show full sequence
-#         left_end, right_end = 0, len(ref_seq)
-
-#     # Shift cut points into window coords (if provided)
-#     cut_points_window = None
-#     if cut_points is not None:
-#         try:
-#             cut_points_window = [cp - left_end for cp in cut_points]
-#         except TypeError:
-#             # Single integer
-#             cut_points_window = [cut_points - left_end]
-
-#     # Shift sgRNA intervals into window coords
-#     pegRNA_intervals_window = []
-#     if pegRNA_intervals is not None:
-#         for (s, e) in pegRNA_intervals:
-#             pegRNA_intervals_window.append((s - left_end, e - left_end))
-#     ##### END OF NEW METHOD ######
-
-#     #### Original method ####
-#     # if df_alleles.shape[0] == 0:
-#     #     return df_alleles
-
-#     # left_end = max(0, pegRNA_intervals[0][0] - 20)
-#     # right_end = min(len(ref_seq), pegRNA_intervals[1][1] + 20)
-
-#     # cut_points[0] = cut_points[0] - left_end
-#     # cut_points[1] = cut_points[1] - left_end
-#     #### End of Original method ####
-
-
-#     # don’t overwrite original
-#     df = df_alleles.copy()
-
-#     # group first
-#     df = (
-#         df.groupby(['Aligned_Sequence', 'Reference_Sequence', 'Read_Status',
-#                     'n_deleted', 'n_inserted', 'n_mutated'], dropna=False)
-#           .sum()
-#           .reset_index()
-#     )
-#     # then slice
-#     df['Aligned_Sequence']   = df['Aligned_Sequence'].str.slice(left_end, right_end)
-#     df['Reference_Sequence'] = df['Reference_Sequence'].str.slice(left_end, right_end)
-
-#     df = df.set_index('Aligned_Sequence')
-
-#     # Caused bug by slicing before grouping
-#     # # Slice the two sequence columns only
-#     # df["Aligned_Sequence"] = df["Aligned_Sequence"].str.slice(left_end, right_end)
-#     # df["Reference_Sequence"] = df["Reference_Sequence"].str.slice(left_end, right_end)
-
-#     # # Aggregate counts by sequence + metadata
-#     # df = (
-#     #     df.groupby(
-#     #         [
-#     #             "Aligned_Sequence",
-#     #             "Reference_Sequence",
-#     #             "Read_Status",
-#     #             "n_deleted",
-#     #             "n_inserted",
-#     #             "n_mutated",
-#     #         ],
-#     #         dropna=False,
-#     #     )
-#     #     .sum()
-#     #     .reset_index()
-#     #     .set_index("Aligned_Sequence")
-#     # )
-
-#     df.sort_values(
-#         by=["#Reads", "Aligned_Sequence", "Reference_Sequence"],
-#         ascending=[False, True, True],
-#         inplace=True,
-#     )
-
-#     df["Unedited"] = df["Read_Status"].eq("UNMODIFIED")
-
-#     return (
-#         df,
-#         ref_seq[left_end:right_end],
-#         ref_aln_seq[left_end:right_end],
-#         twin_aln_seq[left_end:right_end],
-#         cut_points,
-#         pegRNA_intervals_window
-#     )
-
-
 def get_dataframe_allele_region(
     df_alleles,
     pegRNA_intervals,
@@ -4369,97 +4167,6 @@ def setAlleleMatplotlibDefaults():
     sns.set(style="white", font_scale=2.2)
 
 
-# def plot_categorical_allele_tables(
-#     min_frequency,
-#     max_n_rows,
-#     df_alleles,
-#     ref_seq,
-#     ref_aln_seq,
-#     twin_aln_seq,
-#     pegRNA_cut_points,
-#     pegRNA_plot_cut_points,
-#     pegRNA_intervals,
-#     pegRNA_mismatches,
-#     pegRNA_names,
-#     spacer_info,
-#     fig_root=None,
-#     produce_png=False,
-# ):
-#     """ """
-
-#     # need to implement custom names in args
-#     if pegRNA_names == ["", ""]:
-#         pegRNA_names = ["pegRNA", "pegRNA"]
-
-#     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
-#         b_extra = spacer_info['spacer_b_num_bases_removed']
-#     else:
-#         b_extra = spacer_info['spacer_a_num_bases_removed']
-
-#     pegRNA_cut_points[1] = pegRNA_cut_points[1] - b_extra
-
-#     # allele_table_plotted_count = 0
-#     # for cat in df_alleles["Category"].unique():
-#     for cat, name in [("Perfect_PE", "b1.Perfect_PE"), 
-#                       ("PE_Indel", "b2.PE_Indel"),
-#                       ("Imperfect_PE", "b3.Imperfect_PE"), 
-#                       ("Left_Flap", "b4.Left_Flap"), 
-#                       ("Right_Flap", "b5.Right_Flap"), 
-#                       ("Imperfect_WT", "b6.Imperfect_WT"), 
-#                       ("WT_Indel", "b7.WT_Indel"), 
-#                       ("WT", "b8.WT"), 
-#                       ("Uncategorized", "b9.Uncategorized")]:
-#         if len(df_alleles[df_alleles["Category"] == cat]) > 0:
-#             df_alleles_cat = df_alleles[df_alleles["Category"] == cat]
-#             (
-#                 df_alleles_around_region,
-#                 ref_seq_region,
-#                 ref_aln_seq_region,
-#                 twin_aln_seq_region,
-#                 pegRNA_cut_points,
-#                 pegRNA_intervals_region
-#             ) = get_dataframe_allele_region(
-#                 df_alleles_cat,
-#                 pegRNA_intervals,
-#                 ref_seq,
-#                 ref_aln_seq,
-#                 twin_aln_seq,
-#                 pegRNA_cut_points,
-#             )
-
-#             X, annot, y_labels, insertion_dict, per_element_annot_kws, is_reference = (
-#                 prep_alleles_table(
-#                     df_alleles_around_region,
-#                     ref_seq_region,
-#                     ref_aln_seq_region,
-#                     twin_aln_seq_region,
-#                     max_n_rows,
-#                     min_frequency,
-#                     pegRNA_intervals
-#                 )
-#             )
-
-#             plot_alleles_heatmap(
-#                 # reference_seq=ref_seq_region,
-#                 reference_aln_seq=ref_aln_seq_region,
-#                 X=X,
-#                 annot=annot,
-#                 y_labels=y_labels,
-#                 insertion_dict=insertion_dict,
-#                 per_element_annot_kws=per_element_annot_kws,
-#                 fig_filename_root=fig_root + f"/{name}",
-#                 SAVE_ALSO_PNG=produce_png,
-#                 plot_cut_point=pegRNA_plot_cut_points,
-#                 cut_point_ind=pegRNA_cut_points,
-#                 sgRNA_intervals=pegRNA_intervals_region,
-#                 sgRNA_names=pegRNA_names,
-#                 sgRNA_mismatches=pegRNA_mismatches,
-#                 category=cat,
-#                 extend_left_non_gap=[0, b_extra]   # per-sgRNA non-gap extension
-#             )
-#             # allele_table_plotted_count += 1
-
-
 def plot_categorical_allele_tables(
     min_frequency,
     max_n_rows,
@@ -4519,11 +4226,11 @@ def plot_categorical_allele_tables(
         cut_points_adjusted = cut_points_ordered
 
     for cat, name_a, name_b, name_r in [
-        ("Perfect_PE", "b1.a.Perfect_PE", "b1.b.Perfect_PE", "b1.Perfect_PE"),
-        ("PE_Indel", "b2.a.PE_Indel", "b2.b.PE_Indel", "b2.PE_Indel"),
+        ("Perfect_TPE", "b1.a.Perfect_TPE", "b1.b.Perfect_TPE", "b1.Perfect_TPE"),
+        ("TPE_Indel", "b2.a.TPE_Indel", "b2.b.TPE_Indel", "b2.TPE_Indel"),
         ("Left_Flap", "b3.a.Left_Flap", "b3.b.Left_Flap", "b3.Left_Flap"),
         ("Right_Flap", "b4.a.Right_Flap", "b4.b.Right_Flap", "b4.Right_Flap"),
-        ("Imperfect_PE", "b5.a.Imperfect_PE", "b5.b.Imperfect_PE", "b5.Imperfect_PE"),
+        ("Imperfect_TPE", "b5.a.Imperfect_TPE", "b5.b.Imperfect_TPE", "b5.Imperfect_TPE"),
         ("Imperfect_WT", "b6.a.Imperfect_WT", "b6.b.Imperfect_WT", "b6.Imperfect_WT"),
         ("WT_Indel", "b7.a.WT_Indel", "b7.b.WT_Indel", "b7.WT_Indel"),
         ("WT", "b8.a.WT", "b8.b.WT", "b8.WT"),
@@ -4597,228 +4304,7 @@ def plot_categorical_allele_tables(
         )
 
 
-# def build_combined_html_report(twinpe_8cat_results_folder,
-#                                html_filename="TwInsPEctor.html"):
-#     """
-#     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
-
-#     Files that contain `.a.` or `.b.` (e.g., `b1.a.Perfect_PE.png`)
-#     are rendered inside the same card with toggle buttons so viewers
-#     can switch between Run A / Run B.
-
-#     Images are displayed fully responsive (entire figure visible) by default,
-#     and individual figures can be clicked to toggle multi-level zoom in a
-#     scrollable view.
-#     """
-
-#     if not os.path.isdir(twinpe_8cat_results_folder):
-#         raise ValueError(f"{twinpe_8cat_results_folder} is not a valid directory")
-
-#     images = sorted(
-#         f for f in os.listdir(twinpe_8cat_results_folder)
-#         if f.lower().endswith(".png")
-#     )
-
-#     if not images:
-#         raise ValueError("No PNG files found in folder.")
-
-#     # Group A/B variants
-#     groups = {}
-#     toggle_regex = re.compile(r"^(?P<stem>.+?)\.(?P<label>[ab])\.(?P<tail>.+)$")
-
-#     for img in images:
-#         match = toggle_regex.match(img)
-#         if match:
-#             label = match.group("label")
-#             key = f"{match.group('stem')}.{match.group('tail')}"
-#             groups.setdefault(key, {"title": key, "variants": {}})
-#             groups[key]["variants"][label] = img
-#         else:
-#             groups[img] = {"title": img, "single": img}
-
-#     cards_html = []
-#     uid = 0
-
-#     for key in sorted(groups):
-#         entry = groups[key]
-#         raw_title = entry["title"]
-#         if raw_title.lower().endswith(".png"):
-#             raw_title = os.path.splitext(raw_title)[0]
-#         title = html.escape(raw_title)
-
-#         if "single" in entry:
-#             img_rel = html.escape(entry["single"])
-
-#             cards_html.append(f"""
-#             <div class="card mb-4 shadow-sm">
-#               <div class="card-header fw-semibold">{title}</div>
-#               <div class="card-body text-center">
-#                 <div class="img-panel">
-#                   <img src="{img_rel}" class="report-img"/>
-#                 </div>
-#               </div>
-#             </div>
-#             """)
-
-#         else:
-#             uid += 1
-#             buttons = []
-#             panels = []
-
-#             for label in sorted(entry["variants"]):
-#                 img_rel = html.escape(entry["variants"][label])
-
-#                 panel_id = f"panel-{uid}-{label}"
-#                 active = "active" if label == "a" else ""
-#                 hidden = "" if label == "a" else "d-none"
-#                 label_text = "A" if label == "a" else "B"
-
-#                 buttons.append(
-#                     f'<button type="button" '
-#                     f'class="btn btn-outline-primary {active}" '
-#                     f'data-target="{panel_id}">{label_text}</button>'
-#                 )
-
-#                 panels.append(f"""
-#                     <div id="{panel_id}" class="img-panel {hidden}">
-#                       <img src="{img_rel}" class="report-img"/>
-#                     </div>
-#                 """)
-
-#             cards_html.append(f"""
-#             <div class="card mb-4 shadow-sm">
-#               <div class="card-header fw-semibold">{title}</div>
-#               <div class="card-body text-center">
-#                 <div class="btn-group mb-3" role="group">
-#                   {''.join(buttons)}
-#                 </div>
-#                 {''.join(panels)}
-#               </div>
-#             </div>
-#             """)
-
-#     html_out = f"""<!DOCTYPE html>
-# <html lang="en">
-# <head>
-#   <meta charset="utf-8">
-#   <title>TwInsPEctor</title>
-#   <link rel="stylesheet"
-#         href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
-#   <style>
-#     body {{
-#       font-family: 'Montserrat', sans-serif;
-#       background-color: #f7f9fc;
-#     }}
-
-#     /* Default: no inner scroll box, let the page scroll */
-#     .img-panel {{
-#       background-color: #ffffff;
-#       border-radius: 6px;
-#       padding: 0.25rem;
-#       display: flex;
-#       justify-content: center;
-#       align-items: center;
-#       min-height: 40px;
-#     }}
-
-#     /* When zoomed, constrain height and enable scroll inside the panel */
-#     .img-panel.zoomed-panel {{
-#       max-height: 80vh;
-#       overflow: auto;
-#     }}
-
-#     .report-img {{
-#       display: block;
-#       max-width: 100%;
-#       max-height: 80vh;
-#       height: auto;
-#       border: 1px solid #e0e0e0;
-#       border-radius: 4px;
-#       object-fit: contain;
-#       cursor: zoom-in;
-#       transition: transform 0.2s ease-out;
-#     }}
-
-#     /* Any zoom level > 1 uses this cursor */
-#     .report-img.zoomed {{
-#       cursor: zoom-out;
-#     }}
-#   </style>
-# </head>
-# <body class="p-4">
-#   <div class="container">
-#     <div class="text-center mb-5">
-#       <h1 class="display-5">TwInsPEctor</h1>
-#       <p class="text-muted">{html.escape(twinpe_8cat_results_folder)}</p>
-#     </div>
-#     {''.join(cards_html)}
-#   </div>
-
-#   <script>
-#     // Toggle Run A / Run B panels
-#     document.querySelectorAll('.btn-group button').forEach(function(btn) {{
-#       btn.addEventListener('click', function() {{
-#         const group = btn.closest('.card-body');
-#         group.querySelectorAll('.btn-group button')
-#              .forEach(b => b.classList.remove('active'));
-#         btn.classList.add('active');
-#         group.querySelectorAll('.img-panel')
-#              .forEach(p => p.classList.add('d-none'));
-#         const target = document.getElementById(btn.dataset.target);
-#         if (target) target.classList.remove('d-none');
-#       }});
-#     }});
-
-#     // Multi-level zoom per image: cycle through scale 1 -> 1.7 -> 3 -> 1 ...
-#     const ZOOM_LEVELS = [1, 1.7, 3];
-
-#     document.querySelectorAll('.report-img').forEach(function(img) {{
-#       img.dataset.zoom = '1';
-
-#       img.addEventListener('click', function() {{
-#         const panel = img.closest('.img-panel');
-#         let current = parseFloat(img.dataset.zoom || '1');
-#         let idx = ZOOM_LEVELS.indexOf(current);
-#         if (idx === -1) idx = 0;
-#         idx = (idx + 1) % ZOOM_LEVELS.length;
-#         const next = ZOOM_LEVELS[idx];
-#         img.dataset.zoom = String(next);
-
-#         if (next === 1) {{
-#           // Reset to default view
-#           img.classList.remove('zoomed');
-#           img.style.transform = '';
-#           img.style.transformOrigin = '';
-#           if (panel) {{
-#             panel.classList.remove('zoomed-panel');
-#             panel.scrollTop = 0;
-#             panel.scrollLeft = 0;
-#           }}
-#         }} else {{
-#           // Zoomed-in view with scrollable panel
-#           img.classList.add('zoomed');
-#           img.style.transformOrigin = 'top left';
-#           img.style.transform = 'scale(' + next + ')';
-#           if (panel) {{
-#             panel.classList.add('zoomed-panel');
-#           }}
-#         }}
-#       }});
-#     }});
-#   </script>
-# </body>
-# </html>
-# """
-
-#     out_path = os.path.join(twinpe_8cat_results_folder, html_filename)
-
-#     with open(out_path, "w", encoding="utf-8") as fout:
-#         fout.write(html_out)
-
-#     return out_path
-
-
-def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, html_filename="TwInsPEctor.html"):
+def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, parent_folder, html_filename="TwInsPEctor_report.html"):
     """
     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
     """
@@ -4857,7 +4343,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
             v_key = chr(ord("a") + i)  # 'a', 'b', 'c',...
             variants[v_key] = {
                 "img": fname,
-                "text": button_texts[i],
+                "text": button_texts[i] if i < len(button_texts) else v_key.upper(),
             }
         groups[group_key] = {
             "title": title,
@@ -4866,11 +4352,11 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 
     # Custom titles for A/B cards
     ab_titles = {
-        "b1.Perfect_PE.png": "Perfect TPE Alleles",
-        "b2.PE_Indel.png": "TPE Alleles with Indels",
+        "b1.Perfect_TPE.png": "Perfect TPE Alleles",
+        "b2.TPE_Indel.png": "TPE Alleles with Indels",
         "b3.Left_Flap.png": "Left Flap TPE Alleles",
         "b4.Right_Flap.png": "Right Flap TPE Alleles",
-        "b5.Imperfect_PE.png": "Imperfect TPE Alleles",
+        "b5.Imperfect_TPE.png": "Imperfect TPE Alleles",
         "b6.Imperfect_WT.png": "Imperfect WT Alleles",
         "b7.WT_Indel.png": "WT Alleles with Indels",
         "b8.WT.png": "WT Alleles",
@@ -4903,12 +4389,13 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
         "a2.Category_summary_stacked.png", 
         "a1.Reads_input_summary.png"
     ]
-    if all(f in images for f in group1_files):
+    existing_group1 = [f for f in group1_files if f in images]
+    if existing_group1:
         _make_special_group(
             "a1-3.summary",
             "Summary",
-            group1_files,
-            ["Categories", "Categories stacked", "Reads"],
+            existing_group1,
+            ["Categories", "Categories stacked", "Reads"][:len(existing_group1)],
         )
 
     # Second special card: a5, a6, a10.a
@@ -4918,12 +4405,13 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
         "a10.a.Edit_type_summary.png",
     ]
 
-    if all(f in images for f in group2_files):
+    existing_group2 = [f for f in group2_files if f in images]
+    if existing_group2:
         _make_special_group(
             "a5-6-10.TPE_profiles",
             "Editing Per Base",
-            group2_files,
-            ["All reads", "Edited reads", "Editing - Full Region"],
+            existing_group2,
+            ["All reads", "Edited reads", "Edit type - Full edit"][:len(existing_group2)],
         )
 
     group3_files = [
@@ -4931,12 +4419,13 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
         "a8.Left_TPEs_vs_indels.png",
         "a9.Right_TPEs_vs_indels.png",
     ]
-    if all(f in images for f in group3_files):
+    existing_group3 = [f for f in group3_files if f in images]
+    if existing_group3:
         _make_special_group(
             "a7-9.TPEs_vs_indels",
-            "Indels",
-            group3_files,
-            ["Total", "From Left", "From Right"],
+            "Indels Per Base",
+            existing_group3,
+            ["Total", "From Left", "From Right"][:len(existing_group3)],
         )
 
     cards_html = []
@@ -4951,8 +4440,8 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 
         if "single" in entry:
             # point HTML to Outputs/<filename>
-            img_rel = html.escape(entry["single"])
-            img_rel = os.path.join("Outputs", img_rel)
+            img_rel = os.path.join("Outputs", entry["single"])
+            img_rel = html.escape(img_rel)
             cards_html.append(f"""
             <div class="card mb-4 shadow-sm">
               <div class="card-header fw-semibold">{title}</div>
@@ -4971,8 +4460,8 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
             variant_items = sorted(entry["variants"].items(), key=lambda kv: kv[0])
             for idx, (v_key, v_info) in enumerate(variant_items):
                 # point HTML to Outputs/<filename>
-                img_rel = html.escape(v_info["img"])
-                img_rel = os.path.join("Outputs", img_rel)
+                img_rel = os.path.join("Outputs", v_info["img"])
+                img_rel = html.escape(img_rel)
                 panel_id = f"panel-{uid}-{v_key}"
                 is_first = (idx == 0)
                 active = "active" if is_first else ""
@@ -5016,25 +4505,36 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
       background-color: #f7f9fc;
     }}
 
+    .report-wrapper {{
+      width: 100%;
+      margin: 0 auto;
+    }}
+
+    .card {{
+        width: 100%;
+    }}
+
     .img-panel {{
       background-color: #ffffff;
       border-radius: 6px;
-      padding: 0.25rem;
+      padding: 0rem;
+      height: 68vh;
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 40px;
+      overflow: hidden;
     }}
 
     .img-panel.zoomed-panel {{
-      max-height: 80vh;
       overflow: auto;
+    #   cursor: grab;
     }}
 
     .report-img {{
       display: block;
       max-width: 100%;
-      max-height: auto;
+      max-height: 100%;
+      width: auto;
       height: auto;
       border: 1px solid #e0e0e0;
       border-radius: 4px;
@@ -5050,15 +4550,85 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
     .report-path {{
       font-size: 0.75rem;
       word-break: break-all;
+      margin-top: 0.25rem;
+      margin-bottom: 0rem;
+    }}
+
+    /* Logo styles */
+    .wrapper {{
+      text-align: center;
+      margin-top: -1.5rem;
+      margin-bottom: 0.25rem;
+    }}
+
+    .logo {{
+      font-size: 42px;
+      font-weight: 350;
+      letter-spacing: 1px;
+      display: inline-flex;
+      align-items: baseline;
+    }}
+
+    .twinpe {{
+      color: black;
+    }}
+
+    .spector {{
+      color: gray;
+      font-weight: 300;
+    }}
+
+    .magnifier {{
+      width: 50px;
+      height: 60px;
+      margin: 0 -8px;
+      overflow: visible;
+    }}
+
+    .subtitle {{
+      font-size: 8px;
+      letter-spacing: 2px;
+      color: gray;
+      margin-top: -8px;
     }}
   </style>
 </head>
 <body class="p-4">
-  <div class="container">
-    <div class="text-center mb-5">
-      <h1 class="display-5">TwInsPEctor</h1>
-      <p class="text-muted report-path">{html.escape(twinpe_8cat_results_folder)}</p>
+  <div class="report-wrapper">
+    <div class="wrapper">
+      <div class="logo">
+        <span class="twinpe">TwIn</span>
+        <span class="spector">s</span>
+
+        <svg class="magnifier" viewBox="0 0 94 120">
+          <line x1="19" y1="59" x2="19" y2="125"
+                stroke="black"
+                stroke-width="5"
+                stroke-linecap="round"/>
+          <circle cx="50" cy="60" r="27"
+                  stroke="black"
+                  stroke-width="5"
+                  fill="none"/>
+          <circle cx="55" cy="55" r="16" fill="gray" opacity="0.72"/>
+          <circle cx="55" cy="56" r="6" fill="black"/>
+          <path d="
+            M24 27
+            C37 16, 47 13, 57 19
+            S79 34, 87 25
+            L85 30
+            C74 41, 61 30, 54 24
+            S37 19, 25 27
+            Z
+          " fill="black"/>
+        </svg>
+
+        <span class="twinpe">E</span>
+        <span class="spector">ctor</span>
+      </div>
+      <div class="subtitle">TWIN PRIME EDITING ANALYSIS</div>
+      <p class="text-muted report-path">{html.escape(parent_folder)}</p>
     </div>
+
     {''.join(cards_html)}
   </div>
 
