@@ -2,7 +2,7 @@
 
 TwInsPEctor is a tool for analyzing twin prime editing outcomes from next-generation sequencing reads.
 
-Each read is categorized into one of eight allele types:
+Each read is categorized into one of eight allele types with detailed visualizations:
 - Perfect TPE:    complete programmed edit without indels.
 - TPE Indel:      complete programmed edit with indels.
 - Left Flap:      at least N consecutive programmed bases starting from the left but not from the right.
