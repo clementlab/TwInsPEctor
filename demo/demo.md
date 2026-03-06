@@ -2,19 +2,19 @@
 
 TwInsPEctor is a tool for analyzing twin prime editing outcomes from next-generation sequencing reads.
 
-Each read is categorized into one of eight allele types with detailed visualizations:
-- Perfect TPE:    complete programmed edit without indels.
-- TPE Indel:      complete programmed edit with indels.
-- Left Flap:      at least N consecutive programmed bases starting from the left but not from the right.
-- Right Flap:     at least N consecutive programmed bases starting from the right but not from the left.
-- Imperfect TPE:  incomplete programmed edit (neither or both flaps).
-- Imperfect WT:   incomplete wildtype sequence and none of the programmed edit.
-- WT Indel:       complete wildtype sequence with indels and none of the programmed edit.
-- WT:             complete wildtype sequence without indels and none of the programmed edit.
+Each read is categorized into one of eight allele types with detailed visualizations.
+- Perfect TPE - complete programmed edit without indels.
+- TPE Indel -  complete programmed edit with indels.
+- Left Flap - at least N consecutive programmed bases starting from the left but not from the right.
+- Right Flap - at least N consecutive programmed bases starting from the right but not from the left.
+- Imperfect TPE - incomplete programmed edit (neither or both flaps).
+- Imperfect WT - incomplete wildtype sequence and none of the programmed edit.
+- WT Indel - complete wildtype sequence with indels and none of the programmed edit.
+- WT - complete wildtype sequence without indels and none of the programmed edit.
 
 # Processing overview
 The tool requires four inputs:
-- the input fastq file(s)
+- the input fastq file\(s)
 - the wildtype reference sequence
 - the twin-pe edited sequence
 - the two guide spacer sequences
