@@ -14,17 +14,16 @@ Each read is categorized into one of eight allele types with detailed visualizat
 
 # Processing overview
 The tool requires four inputs:
-- the input fastq file
-- the wildtype (WT) reference sequence
-- the twin-pe (TPE) edited sequence
+- the input fastq file(s)
+- the wildtype reference sequence
+- the twin-pe edited sequence
 - the two guide spacer sequences
 
 # Demo overview
-For this run, we'll be using the input fastq file [here](https://github.com/clementlab/TwInsPEctor/blob/main/demo/demo.fastq.gz). You can download it like this
+For this run, we'll be using the input fastq file [here](https://github.com/clementlab/TwInsPEctor/blob/main/demo/demo.fastq.gz). You can download it like this:
 ```
 wget https://github.com/clementlab/TwInsPEctor/raw/refs/heads/main/demo/demo.fastq.gz
 ```
-
 The wildtype reference sequence is:
 ```
 CGCCGGGAACTGCCGCTGGCCCCCCACCGCCCCAAGGATCTCCCGGTCCCCGCCCGGCGTGCTGACGTCACGGCGCTGCCCCAGGGTGTGCTGGGCAGGTCGCGGGGAGCGCTGGGAAATGGAGTCCATTAGCAGAAGTGGCCCTTGGCCACTTCCAGGAGTCGCTGTGCCCCGATGCACACTGGGAAGTCCGCAGCTCCGAGGCGCCCAGTGGAAATCGCCAGATGAGGGCCTCCTC
@@ -33,14 +32,14 @@ The twin-pe edited sequence is:
 ```
 CGCCGGGAACTGCCGCTGGCCCCCCACCGCCAGGTTTGTCTGGTCAACCACCGCGGTCTCAGTGGTGTACGGTACAAACCTCCACTTCCAGGAGTCGCTGTGCCCCGATGCACACTGGGAAGTCCGCAGCTCCGAGGCGCCCAGTGGAAATCGCCAGATGAGGGCCTCCTC
 ```
-The two guide spacer sequences are this.
+The two guide spacer sequences are these:
 ```
 GCTGGCCCCCCACCGCCCCA
 ```
 ```
 GCGACTCCTGGAAGTGGCCA
 ```
-We can run TwInsPEctor with the following command:
+We can run TwInsPEctor with the following command for bioconda installations:
 ```
 TwInsPEctor -r1 demo.fastq.gz -w CGCCGGGAACTGCCGCTGGCCCCCCACCGCCCCAAGGATCTCCCGGTCCCCGCCCGGCGTGCTGACGTCACGGCGCTGCCCCAGGGTGTGCTGGGCAGGTCGCGGGGAGCGCTGGGAAATGGAGTCCATTAGCAGAAGTGGCCCTTGGCCACTTCCAGGAGTCGCTGTGCCCCGATGCACACTGGGAAGTCCGCAGCTCCGAGGCGCCCAGTGGAAATCGCCAGATGAGGGCCTCCTC -t CGCCGGGAACTGCCGCTGGCCCCCCACCGCCAGGTTTGTCTGGTCAACCACCGCGGTCTCAGTGGTGTACGGTACAAACCTCCACTTCCAGGAGTCGCTGTGCCCCGATGCACACTGGGAAGTCCGCAGCTCCGAGGCGCCCAGTGGAAATCGCCAGATGAGGGCCTCCTC -g GCTGGCCCCCCACCGCCCCA,GCGACTCCTGGAAGTGGCCA
 ```
