@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import html
+import shutil
 import zipfile
 import argparse
 import matplotlib
@@ -45,15 +46,13 @@ def main():
     args = parse_args()
 
     parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder = resolve_output_folders(args, recoding_mode=args.recoding_mode)
-    twinpe_8cat_results_folder_less = twinpe_8cat_results_folder
-    twinpe_8cat_results_folder = os.path.join(twinpe_8cat_results_folder, "Outputs")
     os.makedirs(twinpe_8cat_results_folder, exist_ok=True)
     spacer_a, spacer_b = get_spacers(args.peg_spacers)
 
     spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, spacer_a, spacer_b)
     
     if args.recoding_mode:
-        crispresso_run_folder = os.path.join(parent_folder, "Crispresso_outputs")
+        crispresso_run_folder = os.path.join(parent_folder, "CRISPResso_r")
         
         os.makedirs(crispresso_run_folder, exist_ok=True)
         
@@ -69,8 +68,8 @@ def main():
         print("Finished TwinPE analysis!")
 
     else:
-        crispresso_run_a_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_a")
-        crispresso_run_b_folder = os.path.join(parent_folder, "Crispresso_outputs", "Run_b")
+        crispresso_run_a_folder = os.path.join(parent_folder, "CRISPResso_a")
+        crispresso_run_b_folder = os.path.join(parent_folder, "CRISPResso_b")
 
         os.makedirs(crispresso_output_folder_a, exist_ok=True)
         os.makedirs(crispresso_output_folder_b, exist_ok=True)
@@ -89,7 +88,15 @@ def main():
         analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, crispresso_output_folder_b=crispresso_output_folder_b, args=args, comp_ref_seq_a=comp_ref_seq_a, wt_aln_seq_a=wt_aln_seq_a, twin_aln_seq_a=twin_aln_seq_a, comp_ref_seq_b=comp_ref_seq_b, wt_aln_seq_b=wt_aln_seq_b, twin_aln_seq_b=twin_aln_seq_b, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables) 
         print("Finished TwinPE analysis!")
 
-    build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, parent_folder)
+    build_combined_html_report(twinpe_8cat_results_folder, parent_folder)
+
+    # safe deletion of CRISPResso outputs
+    if not args.keep_crispresso_outputs:
+        parent_folder = os.path.abspath(parent_folder)
+        for name in ["CRISPResso_a", "CRISPResso_b", "CRISPResso_r"]:
+            folder = os.path.join(parent_folder, name)
+            if os.path.isdir(folder):
+                shutil.rmtree(folder)
 
     sys.exit(0)
 
@@ -110,7 +117,7 @@ def parse_args():
             "TPE Indel: complete programmed edit with indels.\n"
             "Left Flap: at least N consecutive programmed bases starting from the left but not from the right.\n"
             "Right Flap: at least N consecutive programmed bases starting from the right but not from the left.\n"
-            "Imperfect TPE: incomplete programmed edit.\n"
+            "Imperfect TPE: incomplete programmed edit (neither or both flaps).\n"
             "Imperfect WT: incomplete wildtype sequence and none of the programmed edit.\n"
             "WT Indel: complete wildtype sequence with indels and none of the programmed edit.\n"
             "WT: complete wildtype sequence without indels and none of the programmed edit.\n"
@@ -134,6 +141,7 @@ def parse_args():
     parser.add_argument("-mfa", "--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles tables.")
     parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables.")
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
+    parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -326,27 +334,27 @@ def resolve_output_folders(args, recoding_mode=False):
         parent_folder = os.path.join(os.getcwd(), args.output_root.rstrip("/"))
         # Mimic CRISPResso output folder naming conventions to get correct path
         if r1m and r2m:
-            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
-            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_a"]), f"CRISPResso_on_{r1m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_b"]), f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}")
         else:   
             raise ValueError("Could not parse fastq file names for output folder naming.")
     else:
         # If output_folder not provided, create own
         if r1m and r2m:
-            parent_folder = os.path.join(os.getcwd(), f"TwinPE_8cat_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            parent_folder = os.path.join(os.getcwd(), f"TwInsPEctor_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
-            parent_folder = os.path.join(os.getcwd(), f"TwinPE_8cat_on_{r1m.group(1)}")
-            crispresso_output_folder_a = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_a"]), f"CRISPResso_on_{r1m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, "Crispresso_outputs",*([] if recoding_mode else ["Run_b"]), f"CRISPResso_on_{r1m.group(1)}")
+            parent_folder = os.path.join(os.getcwd(), f"TwInsPEctor_{r1m.group(1)}")
+            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}")
+            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}")
         else:
             raise ValueError("Could not parse fastq file names for output folder naming.")
         
-    twinpe_8cat_results_folder = os.path.join(parent_folder, "TwinPE_8cat_results")
+    twinpe_8cat_results_folder = os.path.join(parent_folder, "TwInsPEctor_outputs")
 
     return parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder
 
@@ -435,9 +443,9 @@ def analyze_visualize_sample(
 
         df_alleles_b = categorize_alleles(crispresso_output_folder=crispresso_output_folder_b, comp_ref_seq=comp_ref_seq_b, wt_aln_seq=wt_aln_seq_b, twin_aln_seq=twin_aln_seq_b, num_changes_to_check=args.num_changes_to_check, ignore_extraspacer_deletions=args.ignore_extraspacer_deletions)
 
-        #### For Debugging
-        df_alleles_a["df_alleles"].to_csv(os.path.join(twinpe_8cat_results_folder, "c8.a.detailed_allele_table_with_categories.csv"), index=False)
-        df_alleles_b["df_alleles"].to_csv(os.path.join(twinpe_8cat_results_folder, "c8.b.detailed_allele_table_with_categories.csv"), index=False)
+        # Debug
+        # df_alleles_a["df_alleles"].to_csv(os.path.join(twinpe_8cat_results_folder, "c8.a.detailed_allele_table_with_categories.csv"), index=False)
+        # df_alleles_b["df_alleles"].to_csv(os.path.join(twinpe_8cat_results_folder, "c8.b.detailed_allele_table_with_categories.csv"), index=False)
 
         df_alleles_final_a, df_alleles_final_b = resolve_allele_categories(df_alleles_a["df_alleles"], df_alleles_b["df_alleles"])
         
@@ -720,7 +728,7 @@ def get_ref_base_changes(comp_ref_seq=None, wt_aln_seq=None, twin_aln_seq=None, 
         elif wt_base != twin_base:
             raise ValueError('Substitution detected in Replacement mode.')
 
-    # Debug checks
+    # Debug
     del_region_len = del_end - del_start + 1
     ins_region_len = ins_end - ins_start + 1
     if len(bp_changes_arr) != del_region_len + ins_region_len:
@@ -1274,7 +1282,7 @@ def analyze_resolved_categorized_alleles(
             + "\n"
         )
     
-    #### For Debugging
+    # Debug
     # df_alleles_final_a.to_csv(
     #     os.path.join(twinpe_8cat_results_folder, "c9.a.detailed_allele_table_with_resolved_categories.csv"), 
     #                  index=False
@@ -1811,29 +1819,54 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
     ref_a = pd.to_numeric(merged['Aligned_Reference_Scores'], errors='raise')
     ref_b = pd.to_numeric(merged['Aligned_Reference_Scores_B'], errors='raise')
 
+    # Detect Left_Flap vs Right_Flap disagreement: if A/B = right flap and B/A = left flap and similar scores -> imperfect TPE
+    flap_pair = (
+        ((merged['Category'] == "Left_Flap") & (merged['Category_B'] == "Right_Flap")) |
+        ((merged['Category'] == "Right_Flap") & (merged['Category_B'] == "Left_Flap"))
+    )
+
+    # Determine if alignment scores are close
+    FLAP_SCORE_DELTA = 5
+    scores_close = (ref_a - ref_b).abs() <= FLAP_SCORE_DELTA
+
+    imperfect_mask = flap_pair & scores_close
+
     # Ranked override - lower number = higher priority
     CATEGORY_PRIORITY = {
         "Perfect_TPE": 1,
         "TPE_Indel": 2,
         "WT": 3,
         "WT_Indel": 4,
+        "Right_Flap": 5,
+        "Left_Flap": 5,
+        "Imperfect_TPE": 5,
+        # "Imperfect_WT": 6,
     }
+
     DEFAULT_PRIORITY = 9
 
     # Assign priorities
     rank_a = merged['Category'].map(CATEGORY_PRIORITY).fillna(DEFAULT_PRIORITY)
     rank_b = merged['Category_B'].map(CATEGORY_PRIORITY).fillna(DEFAULT_PRIORITY)
 
-    # Convert scores
-    ref_a = pd.to_numeric(merged['Aligned_Reference_Scores'], errors='raise')
-    ref_b = pd.to_numeric(merged['Aligned_Reference_Scores_B'], errors='raise')
-
-    # Decide winner
+    # Decide winner normally
     use_b = (
-        (rank_b < rank_a) |  # Higher biological rank wins
-        ((rank_b == rank_a) & (ref_b > ref_a))  # Tie -> higher score wins
+        (rank_b < rank_a) |
+        ((rank_b == rank_a) & (ref_b > ref_a))
     )
-    winner_df = pd.DataFrame({'sequence_key': merged['sequence_key'], 'winner_source': np.where(use_b, 'B', 'A'), 'Category': np.where(use_b, merged['Category_B'], merged['Category'])})
+
+    winner_category = np.where(use_b, merged['Category_B'], merged['Category'])
+
+    # Override with Imperfect_TPE when flap disagreement + close scores
+    winner_category = np.where(imperfect_mask, "Imperfect_TPE", winner_category)
+
+    winner_source = np.where(imperfect_mask, "Override", np.where(use_b, "B", "A"))
+
+    winner_df = pd.DataFrame({
+        'sequence_key': merged['sequence_key'],
+        'winner_source': winner_source,
+        'Category': winner_category
+    })
 
     # Update df A with the winning categories
     result_a = a.merge(winner_df, on='sequence_key', how='left', suffixes=('', '_winner'))
@@ -2178,7 +2211,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Edited Sequence (recoding)",
+            "Programmed Sequence (recoding)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2197,7 +2230,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Edited Sequence (insertion)",
+            "Programmed Sequence (insertion)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2317,7 +2350,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Edited Sequence (recoding)",
+            "Programmed Sequence (recoding)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2336,7 +2369,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Edited Sequence (insertion)",
+            "Programmed Sequence (insertion)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2450,7 +2483,8 @@ def plot_edit_read_counts_with_indels(
             clip_on=False
         ))
 
-        label_text = "Recoded Sequence" if recoding_mode else "Edited Sequence"
+        # label_text = "Programmed Sequence" if recoding_mode else "Programmed Sequence"
+        label_text = "Programmed Sequence"
 
         ax.text(
             (n - 1) / 2,
@@ -2729,7 +2763,7 @@ def plot_editing_summary(
         ax.text(
             (ins_start + ins_end) / 2,
             y_region - label_gap_data,
-            "Edited Sequence (insertion)",
+            "Programmed Sequence (insertion)",
             ha="center",
             va="top",
             fontsize=22,
@@ -4104,7 +4138,7 @@ def plot_categorical_allele_tables(
         )
 
 
-def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_folder_less, parent_folder, html_filename="TwInsPEctor_report.html"):
+def build_combined_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="TwInsPEctor_report.html"):
     """
     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
     """
@@ -4260,7 +4294,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
             variant_items = sorted(entry["variants"].items(), key=lambda kv: kv[0])
             for idx, (v_key, v_info) in enumerate(variant_items):
                 # point HTML to Outputs/<filename>
-                img_rel = os.path.join("Outputs", v_info["img"])
+                img_rel = os.path.join("TwInsPEctor_outputs", v_info["img"])
                 img_rel = html.escape(img_rel)
                 panel_id = f"panel-{uid}-{v_key}"
                 is_first = (idx == 0)
@@ -4483,7 +4517,7 @@ def build_combined_html_report(twinpe_8cat_results_folder, twinpe_8cat_results_f
 </html>
 """
 
-    out_path = os.path.join(twinpe_8cat_results_folder_less, html_filename)
+    out_path = os.path.join(parent_folder, html_filename)
     with open(out_path, "w", encoding="utf-8") as fout:
         fout.write(html_out)
     return out_path
