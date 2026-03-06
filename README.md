@@ -48,11 +48,6 @@ pip install .
 | `-g`, `--peg_spacers` | comma-separated pegRNA spacer sequences: `<spacerA>,<spacerB>` |
 ---
 
-### Usage
-
-```
-TwInsPEctor -r1 <FASTQ_R1> [-r2 <FASTQ_R2>] -w <WT_SEQUENCE> -t <TWINPE_SEQUENCE> -g <PEG_SPACER_A>,<PEG_SPACER_B> [options]
-```
 ### Optional Arguments
 
 | Argument | Description | Default |
@@ -70,7 +65,13 @@ TwInsPEctor -r1 <FASTQ_R1> [-r2 <FASTQ_R2>] -w <WT_SEQUENCE> -t <TWINPE_SEQUENCE
 | `-nrr`, `--no_rerun` | do not rerun CRISPResso2 if the same parameters were already completed. | off |
 | `-kco`, `--keep_crispresso_outputs` | preserve CRISPResso2 output folders after analysis. | off |
 
-After installation, use the CLI:
+### Usage
+
+```
+TwInsPEctor -r1 <FASTQ_R1> [-r2 <FASTQ_R2>] -w <WT_SEQUENCE> -t <TWINPE_SEQUENCE> -g <PEG_SPACER_A>,<PEG_SPACER_B> [options]
+```
+
+After installation, use the CLI for help:
 
 ```bash
 TwInsPEctor --help
