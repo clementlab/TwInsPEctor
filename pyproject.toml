@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "TwInsPEctor"
-version = "0.1.1"
+version = "0.1.2"
 description = "TwInsPEctor: a tool for analyzing twin prime editing experiments, including data processing and visualization."
 authors = [
     { name="Nate Masson" },
