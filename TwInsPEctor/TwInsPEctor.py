@@ -1038,6 +1038,12 @@ def analyze_resolved_categorized_alleles(
     # has_indel_in_match_arr_count = 0
     # has_any_indel_byproduct_count = 0
 
+    df_alleles_final_a = df_alleles_final_a.set_index("sequence_key")
+    df_alleles_final_b = df_alleles_final_b.set_index("sequence_key")
+
+    # increase speed by caching b
+    # b_lookup = df_alleles_final_b.to_dict("index")
+
     for sequence_key, allele in df_alleles_final_a.iterrows():
         if allele['winner_source'] == 'A':
             comp_aln_seq_read = allele.Reference_Sequence
@@ -1049,6 +1055,8 @@ def analyze_resolved_categorized_alleles(
             has_indel = indel_checking(allele.all_insertion_left_positions, allele.all_deletion_positions, del_start_a, del_end_a, ins_start_a, ins_end_a, ignore_extraspacer_deletions, pegRNA_intervals_a)
 
         elif allele['winner_source'] == 'B':
+            # increase speed by using cached dict instead of df lookup
+            # b_allele = b_lookup.get(sequence_key)
             b_allele = df_alleles_final_b.loc[sequence_key]
             comp_aln_seq_read = b_allele.Reference_Sequence
             read_aln_seq = b_allele.Aligned_Sequence
@@ -1805,6 +1813,11 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
     a = get_allele_df_keys(df_alleles_a)
     b = get_allele_df_keys(df_alleles_b)
 
+    # If output should only contain reads that exist in both A and B - can then use outer, inner, or left merge
+    # shared_keys = set(a['sequence_key']) & set(b['sequence_key'])
+    # a = a[a['sequence_key'].isin(shared_keys)]
+    # b = b[b['sequence_key'].isin(shared_keys)]
+
     # Check for duplicates in sequence_key within each dataframe
     if a['sequence_key'].duplicated().any():
         raise ValueError("Duplicate sequence_key in df_alleles_a")
@@ -1813,7 +1826,7 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
         raise ValueError("Duplicate sequence_key in df_alleles_b")
 
     # Merge only the needed columns from B
-    merged = a.merge(b[['sequence_key', 'Category', 'Aligned_Reference_Scores']], on='sequence_key', how='left', suffixes=('', '_B'), validate='one_to_one')
+    merged = a.merge(b[['sequence_key', 'Category', 'Aligned_Reference_Scores']], on='sequence_key', how='outer', suffixes=('', '_B'), validate='one_to_one')
 
     # Convert reference scores to numeric for comparison
     ref_a = pd.to_numeric(merged['Aligned_Reference_Scores'], errors='raise')
@@ -1851,6 +1864,7 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
 
     # Decide winner normally
     use_b = (
+        merged['Category'].isna() | # A missing -> use B
         (rank_b < rank_a) |
         ((rank_b == rank_a) & (ref_b > ref_a))
     )
@@ -1871,12 +1885,12 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
     # Update df A with the winning categories
     result_a = a.merge(winner_df, on='sequence_key', how='left', suffixes=('', '_winner'))
     result_a['Category'] = result_a['Category_winner']
-    result_a = result_a.drop(columns=['Category_winner', 'sequence_key_fw', 'sequence_key_rc', 'sequence_key'])
+    result_a = result_a.drop(columns=['Category_winner', 'sequence_key_fw', 'sequence_key_rc']) # , 'sequence_key'])
 
     # Update df B with the winning categories
     result_b = b.merge(winner_df, on='sequence_key', how='left', suffixes=('', '_winner'))
     result_b['Category'] = result_b['Category_winner']
-    result_b = result_b.drop(columns=['Category_winner', 'sequence_key_fw', 'sequence_key_rc', 'sequence_key'])
+    result_b = result_b.drop(columns=['Category_winner', 'sequence_key_fw', 'sequence_key_rc']) # , 'sequence_key'])
     
     return result_a, result_b
 
