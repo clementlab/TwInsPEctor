@@ -133,7 +133,7 @@ def parse_args():
     parser.add_argument("-o", "--output_root", type=str, default=None, help="Root output folder for CRISPResso2 and TwinPE 8cat results. If not provided, a folder will be created in the current working directory based on the input fastq file names.")
     parser.add_argument("-ne", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed bases that must be edited for read to be classified.")
     parser.add_argument("-rcm", "--recoding_mode", action="store_true", help="Run in recoding mode when there are only base substitutions.")
-    parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=50, help="Default minimum homology score for a read to align to the compound reference amplicon")
+    parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=30, help="Default minimum homology score for a read to align to the compound reference amplicon")
     parser.add_argument("-pfr", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
     parser.add_argument("-ied", "--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
     parser.add_argument("-nat", "--no_allele_tables", action="store_true", help="Decrease run time when allele table are not wanted.")
@@ -142,6 +142,7 @@ def parse_args():
     parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables.")
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
+    parser.add_argument("-ts", "--trim_string", type=str, default="", help="String to trim reads using fastp within CRISPResso2 before analysis.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -399,6 +400,9 @@ def build_crispresso_command(args=None, comp_ref_seq=None, wt_seq=None, twin_seq
         cmd.extend(["--fastq_r2", args.fastq_r2])
     if args.no_rerun:
         cmd.append("--no_rerun")
+    if args.trim_string:
+        cmd.extend(["--trim_sequences"])
+        cmd.extend(["--fastp_options_string", f"{args.trim_string}"])
     if args.debug:
         cmd.append("--debug")
 
