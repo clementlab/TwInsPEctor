@@ -142,7 +142,7 @@ def parse_args():
     parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables.")
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
-    parser.add_argument("-ts", "--trim_string", type=str, default="", help="String to trim reads using fastp within CRISPResso2 before analysis.")
+    parser.add_argument("-ts", "--trim_string", type=str, default=None, help="String to trim reads using fastp within CRISPResso2 before analysis.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -1427,7 +1427,7 @@ def categorize_analyze_recoding_alleles(
     # allele_categories = {} # e.g. TTRTT > Left_flap
     perfect_T_count = 0
 
-    # TODO: Not needed for recoding mode - remove
+    # Not needed for recoding mode - remove
     # Plot full ins del region
     # full_edit_counts = [0] * len(bp_changes_arr_a)
     # full_deletion_counts = [0] * len(bp_changes_arr_a)
