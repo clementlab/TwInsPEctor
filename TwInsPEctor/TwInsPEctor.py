@@ -88,7 +88,7 @@ def main():
         analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, crispresso_output_folder_b=crispresso_output_folder_b, args=args, comp_ref_seq_a=comp_ref_seq_a, wt_aln_seq_a=wt_aln_seq_a, twin_aln_seq_a=twin_aln_seq_a, comp_ref_seq_b=comp_ref_seq_b, wt_aln_seq_b=wt_aln_seq_b, twin_aln_seq_b=twin_aln_seq_b, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables) 
         print("Finished TwinPE analysis!")
 
-    build_combined_html_report(twinpe_8cat_results_folder, parent_folder)
+    build_html_report(twinpe_8cat_results_folder, parent_folder)
 
     # safe deletion of CRISPResso outputs
     if not args.keep_crispresso_outputs:
@@ -143,6 +143,7 @@ def parse_args():
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
     parser.add_argument("-ts", "--trim_string", type=str, default=None, help="String to trim reads using fastp within CRISPResso2 before analysis.")
+    parser.add_argument("-fp", "--fastp_command", type=str, default=None, help="Command to run fastp for read trimming within CRISPResso2.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -403,6 +404,8 @@ def build_crispresso_command(args=None, comp_ref_seq=None, wt_seq=None, twin_seq
     if args.trim_string:
         cmd.extend(["--trim_sequences"])
         cmd.extend(["--fastp_options_string", f"{args.trim_string}"])
+    if args.fastp_command:
+        cmd.extend(["--fastp_command", args.fastp_command])
     if args.debug:
         cmd.append("--debug")
 
@@ -478,6 +481,7 @@ def analyze_visualize_sample(
 
     setBarMatplotlibDefaults()
     
+    print("Creating barplots...")
     plot_summary_barplots(
         results_final["folder_category_counts"],  
         crispresso_output_folder_a, 
@@ -491,12 +495,14 @@ def analyze_visualize_sample(
         del_len=results_final["del_len"] if not args.recoding_mode else None, 
         ins_len=results_final["ins_len"] if not args.recoding_mode else None,
         insert_sequence=df_alleles_a["insert_sequence"], 
+        deletion_sequence=df_alleles_a["deletion_sequence"],
         deletion_insertion_sequence=df_alleles_a["deletion_insertion_sequence"],
         recoding_mode=args.recoding_mode, 
         produce_png=args.produce_png
     )
 
     if not skip_allele_tables:
+        print("Generating allele tables...")
         setAlleleMatplotlibDefaults()
 
         if args.recoding_mode:
@@ -584,7 +590,7 @@ def plot_summary_barplots(folder_category_counts, crispresso_output_folder_a, tw
     )
     
 
-def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, insert_sequence=None, deletion_insertion_sequence=None, recoding_mode=False, produce_png=False,):
+def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, insert_sequence=None, deletion_sequence=None, deletion_insertion_sequence=None, recoding_mode=False, produce_png=False,):
     
     # This plot may not be useful
     # plot_successful_twin_edit_counts_by_category(
@@ -626,6 +632,32 @@ def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  
         from_left_all_edit_counts=results_final["from_left_all_edit_counts"],
         perfect_edit_counts=results_final["perfect_edit_counts"],
         insert_sequence=insert_sequence,
+        recoding_mode=recoding_mode, 
+        fig_root=twinpe_8cat_results_folder,
+        produce_png=produce_png, 
+        category_colors=CATEGORY_COLORS
+    )
+
+    plot_total_read_counts_del_region(
+        total_counts=results_final["total_counts"], 
+        edit_counts=results_final["edit_counts_del_region"],
+        from_right_all_edit_counts_del_region=results_final["from_right_all_edit_counts_del_region"],
+        from_left_all_edit_counts_del_region=results_final["from_left_all_edit_counts_del_region"],
+        perfect_edit_counts=results_final["perfect_edit_counts"],
+        deletion_sequence=deletion_sequence,
+        recoding_mode=recoding_mode, 
+        fig_root=twinpe_8cat_results_folder,
+        produce_png=produce_png, 
+        category_colors=CATEGORY_COLORS
+    )
+    
+    plot_edit_read_counts_del_region(
+        # total_counts=results_final["total_counts"], 
+        edit_counts=results_final["edit_counts_del_region"],
+        from_right_all_edit_counts_del_region=results_final["from_right_all_edit_counts_del_region"],
+        from_left_all_edit_counts_del_region=results_final["from_left_all_edit_counts_del_region"],
+        perfect_edit_counts=results_final["perfect_edit_counts"],
+        deletion_sequence=deletion_sequence,
         recoding_mode=recoding_mode, 
         fig_root=twinpe_8cat_results_folder,
         produce_png=produce_png, 
@@ -956,6 +988,7 @@ def categorize_alleles(crispresso_output_folder=None, comp_ref_seq=None,  wt_aln
         "ins_region_len": ins_region_len, 
         "del_region_len": del_region_len,
         "insert_sequence": comp_ref_seq[ins_start:ins_end+1], 
+        "deletion_sequence": comp_ref_seq[del_start:del_end+1], 
         "deletion_insertion_sequence": comp_ref_seq[del_start:ins_end+1]
     }
 
@@ -989,6 +1022,11 @@ def analyze_resolved_categorized_alleles(
     edit_counts = [0] * ins_region_len_a
     from_left_all_edit_counts = [0] * ins_region_len_a
     from_right_all_edit_counts = [0] * ins_region_len_a
+
+    edit_counts_del_region = [0] * del_region_len_a
+    from_left_all_edit_counts_del_region = [0] * del_region_len_a
+    from_right_all_edit_counts_del_region = [0] * del_region_len_a
+
     cat_perfect_pe_count = 0
     cat_perfect_pe_count_arr = [0] * ins_region_len_a
     cat_pe_indels_count = 0
@@ -1147,11 +1185,33 @@ def analyze_resolved_categorized_alleles(
             else:
                 break
 
+        for pos_idx, match in zip(range(len(del_match_arr)), del_match_arr):
+            if match == 'T':
+                from_left_all_edit_counts_del_region[pos_idx] += allele['#Reads']
+                # if has_indel:
+                #     from_left_all_edit_counts_del_region_with_indels[pos_idx] += allele['#Reads']
+            else:
+                break
+
+        for pos_idx, match in zip(reversed(range(len(del_match_arr))), reversed(del_match_arr)):
+            if match == 'T':
+                from_right_all_edit_counts_del_region[pos_idx] += allele['#Reads']
+                # if has_indel:
+                #     from_right_all_edit_counts_del_region_with_indels[pos_idx] += allele['#Reads']
+            else:
+                break
+
         for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
             if match == 'T':
                 edit_counts[pos_idx] += allele['#Reads']
                 if has_indel:
                     edit_counts_with_indels[pos_idx] += allele['#Reads']
+
+        for pos_idx, match in zip(range(len(del_match_arr)), del_match_arr):
+            if match == 'T':
+                edit_counts_del_region[pos_idx] += allele['#Reads']
+                # if has_indel:
+                #     edit_counts_with_indels_del_region[pos_idx] += allele['#Reads']
 
         if ins_match_arr == ['T']*len(ins_match_arr):
             perfect_T_count += allele['#Reads']
@@ -1248,11 +1308,26 @@ def analyze_resolved_categorized_alleles(
             + "\n"
         )
         fout.write(
-            "insertion_counts\t" + "\t".join([str(x) for x in full_ins_arr]) + "\n"
+            "edit_counts_del_region\t"
+            + "\t".join([str(x) for x in edit_counts_del_region])
+            + "\n"
         )
         fout.write(
-            "substitution_counts\t" + "\t".join([str(x) for x in full_sub_arr]) + "\n"
+            "from_left_all_edit_counts_del_region\t"
+            + "\t".join([str(x) for x in from_left_all_edit_counts_del_region])
+            + "\n"
         )
+        fout.write(
+            "from_right_all_edit_counts_del_region\t"
+            + "\t".join([str(x) for x in from_right_all_edit_counts_del_region])
+            + "\n"
+        )
+        # fout.write(
+        #     "insertion_counts\t" + "\t".join([str(x) for x in full_ins_arr]) + "\n"
+        # )
+        # fout.write(
+        #     "substitution_counts\t" + "\t".join([str(x) for x in full_sub_arr]) + "\n"
+        # )
         # fout.write(
         #     "deletion_counts\t" + "\t".join([str(x) for x in deletion_counts]) + "\n"
         # )
@@ -1309,6 +1384,9 @@ def analyze_resolved_categorized_alleles(
         "edit_counts": edit_counts, 
         "from_left_all_edit_counts": from_left_all_edit_counts, 
         "from_right_all_edit_counts": from_right_all_edit_counts, 
+        "edit_counts_del_region": edit_counts_del_region, 
+        "from_left_all_edit_counts_del_region": from_left_all_edit_counts_del_region,
+        "from_right_all_edit_counts_del_region": from_right_all_edit_counts_del_region,
         "perfect_edit_counts": perfect_edit_counts,
         # inputs to plot_successful_twin_edit_counts_by_category only
         "folder_category_counts": folder_category_counts, 
@@ -2169,9 +2247,9 @@ def plot_total_read_counts(
 
     ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous TPEs From Right", alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous TPEs From Left", alpha=0.7)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect TPE"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap Integration From Right", alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap Integration From Left", alpha=0.7)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("All Reads", fontsize=14)
     ax.set_ylabel("Read Counts", fontsize=12)
@@ -2229,7 +2307,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Programmed Sequence (recoding)",
+            "Programmed Sequence (recoded)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2248,7 +2326,7 @@ def plot_total_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Programmed Sequence (insertion)",
+            "Programmed Sequence (inserted)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2282,9 +2360,9 @@ def plot_total_read_counts(
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    # plt.savefig(fig_root + "/a5.TPE_profile_all_reads.pdf", bbox_inches='tight')
+    # plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a5.TPE_profile_all_reads.png", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.png", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts(
@@ -2306,9 +2384,9 @@ def plot_edit_read_counts(
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous TPEs From Right", color=category_colors["Right Flap"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous TPEs From Left", color=category_colors["Left Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPEs", color=category_colors["Perfect TPE"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Right", color=category_colors["Right Flap"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Left", color=category_colors["Left Flap"], alpha=0.75)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("Edited Reads", fontsize=14)
     ax.set_ylabel("Read Counts", fontsize=12)
@@ -2368,7 +2446,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Programmed Sequence (recoding)",
+            "Programmed Sequence (recoded)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2387,7 +2465,7 @@ def plot_edit_read_counts(
         ax.text(
             (n - 1)/2,
             y_region - label_gap_data,
-            "Programmed Sequence (insertion)",
+            "Programmed Sequence (inserted)",
             ha="center",
             va="top",
             fontsize=12,
@@ -2421,9 +2499,299 @@ def plot_edit_read_counts(
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
-    # plt.savefig(fig_root + "/a6.TPE_profile_edited_reads.pdf", bbox_inches='tight')
+    # plt.savefig(fig_root + "/a5.3'_flap_integration_edited_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a6.TPE_profile_edited_reads.png", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a5.3'_flap_integration_edited_reads.png", bbox_inches='tight', dpi=300)
+
+
+def plot_total_read_counts_del_region(
+    total_counts,
+    edit_counts,
+    from_right_all_edit_counts_del_region,
+    from_left_all_edit_counts_del_region,
+    perfect_edit_counts, 
+    deletion_sequence,
+    recoding_mode=False, 
+    fig_root=None,
+    produce_png=False, 
+    category_colors=None
+):
+    total_counts = [total_counts[0]] * len(deletion_sequence)
+    perfect_edit_counts = [perfect_edit_counts[0]] * len(deletion_sequence)
+    # unedited_counts = np.array(total_counts) - np.array(edit_counts)
+    
+    n = len(deletion_sequence)
+    indices = np.arange(n)
+    bar_width = 0.85
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
+    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
+
+    ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect WT"], alpha=1.0)
+    # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
+
+    # ax.set_title("Edited Reads", fontsize=14)
+    ax.set_ylabel("Read Counts", fontsize=12)
+
+    ax.set_xticks(indices)
+
+    max_height = max(total_counts)
+
+    gap_inches = 0.08
+    rect_height_inches = 0.25
+    fig_height_in = fig.get_size_inches()[1]
+    ax_pos = ax.get_position()
+    ax_height_in = fig_height_in * ax_pos.height
+
+    gap_data = gap_inches / ax_height_in * max_height
+    rect_height = rect_height_inches / ax_height_in * max_height
+    y_base = -(gap_data + rect_height)
+
+    for i, base in enumerate(deletion_sequence):
+        rect = patches.Rectangle(
+            (i - bar_width/2, y_base),
+            bar_width,
+            rect_height,
+            facecolor=BASE_COLORS.get(base, "#ffffff"),
+            edgecolor="none",
+            clip_on=False
+        )
+        ax.add_patch(rect)
+        ax.text(
+            i,
+            y_base + rect_height/2,
+            base,
+            ha="center",
+            va="center",
+            fontsize=12,
+            clip_on=False
+        )
+
+    region_gap_inches = 0.05
+    region_height_inches = 0.12
+    label_gap_inches = 0.04
+
+    region_gap_data = region_gap_inches / ax_height_in * max_height
+    region_height = region_height_inches / ax_height_in * max_height
+    label_gap_data = label_gap_inches / ax_height_in * max_height
+    y_region = y_base - region_gap_data - region_height
+
+    if recoding_mode:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Endogenous Sequence (recoded)",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+    else:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Endogenous Sequence (deleted)",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+
+    spine_gap = bar_width / 2 + 0.15
+    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+    # ax.set_ylim(y_region, max_height * 1.05)
+    ax.set_ylim(0, max_height * 1.05)
+
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    ax.set_xticks([])
+    ax.tick_params(axis='x', length=0)
+
+    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=12
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+    # plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight')
+    # if produce_png:
+    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.png", bbox_inches='tight', dpi=300)
+
+
+def plot_edit_read_counts_del_region(
+    # total_counts,
+    edit_counts,
+    from_right_all_edit_counts_del_region,
+    from_left_all_edit_counts_del_region,
+    perfect_edit_counts, 
+    deletion_sequence,
+    recoding_mode=False, 
+    fig_root=None,
+    produce_png=False, 
+    category_colors=None
+):
+    perfect_edit_counts = [perfect_edit_counts[0]] * len(deletion_sequence)
+    # unedited_counts = np.array(total_counts) - np.array(edit_counts)
+    
+    n = len(deletion_sequence)
+    indices = np.arange(n)
+    bar_width = 0.85
+    width_per_base = 0.4
+    fig_width = max(6, n * width_per_base)
+    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
+
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect WT"], alpha=1.0)  # If useful needs to be tracked is new array with del length
+    # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
+    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
+
+    # ax.set_title("Edited Reads", fontsize=14)
+    ax.set_ylabel("Read Counts", fontsize=12)
+
+    ax.set_xticks(indices)
+
+    max_height = max(edit_counts)
+
+    gap_inches = 0.08
+    rect_height_inches = 0.25
+    fig_height_in = fig.get_size_inches()[1]
+    ax_pos = ax.get_position()
+    ax_height_in = fig_height_in * ax_pos.height
+
+    gap_data = gap_inches / ax_height_in * max_height
+    rect_height = rect_height_inches / ax_height_in * max_height
+    y_base = -(gap_data + rect_height)
+
+    for i, base in enumerate(deletion_sequence):
+        rect = patches.Rectangle(
+            (i - bar_width/2, y_base),
+            bar_width,
+            rect_height,
+            facecolor=BASE_COLORS.get(base, "#ffffff"),
+            edgecolor="none",
+            clip_on=False
+        )
+        ax.add_patch(rect)
+        ax.text(
+            i,
+            y_base + rect_height/2,
+            base,
+            ha="center",
+            va="center",
+            fontsize=12,
+            clip_on=False
+        )
+
+    region_gap_inches = 0.05
+    region_height_inches = 0.12
+    label_gap_inches = 0.04
+
+    region_gap_data = region_gap_inches / ax_height_in * max_height
+    region_height = region_height_inches / ax_height_in * max_height
+    label_gap_data = label_gap_inches / ax_height_in * max_height
+    y_region = y_base - region_gap_data - region_height
+
+    if recoding_mode:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Endogenous Sequence (recoded)",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+    else:
+        ax.add_patch(patches.Rectangle(
+            (0 - bar_width/2, y_region),
+            n - 1 + bar_width,
+            region_height,
+            facecolor="lightgrey",
+            edgecolor="none",
+            clip_on=False
+        ))
+        ax.text(
+            (n - 1)/2,
+            y_region - label_gap_data,
+            "Endogenous Sequence (deleted)",
+            ha="center",
+            va="top",
+            fontsize=12,
+            color="black",
+            clip_on=False
+        )
+
+    spine_gap = bar_width / 2 + 0.15
+    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+    # ax.set_ylim(y_region, max_height * 1.05)
+    ax.set_ylim(0, max_height * 1.05)
+
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    ax.set_xticks([])
+    ax.tick_params(axis='x', length=0)
+
+    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
+    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
+    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+
+    ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=12
+    )
+
+    plt.tight_layout(rect=[0, 0.05, 1, 1])
+
+    # plt.savefig(fig_root + "/a7.5'_flap_removal_edited_reads.pdf", bbox_inches='tight')
+    # if produce_png:
+    plt.savefig(fig_root + "/a7.5'_flap_removal_edited_reads.png", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts_with_indels(
@@ -2555,7 +2923,7 @@ def plot_edit_read_counts_with_indels(
                fontsize=12)
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(f"{fig_root}/a7.Total_TPEs_vs_indels.png",
+    plt.savefig(f"{fig_root}/a9.Total_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig1)
 
@@ -2585,7 +2953,7 @@ def plot_edit_read_counts_with_indels(
                fontsize=12)
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(f"{fig_root}/a8.Left_TPEs_vs_indels.png",
+    plt.savefig(f"{fig_root}/a10.Left_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig2)
 
@@ -2615,7 +2983,7 @@ def plot_edit_read_counts_with_indels(
                fontsize=12)
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
-    plt.savefig(f"{fig_root}/a9.Right_TPEs_vs_indels.png",
+    plt.savefig(f"{fig_root}/a11.Right_TPEs_vs_indels.png",
                 bbox_inches="tight", dpi=300)
     plt.close(fig3)
 
@@ -2824,17 +3192,122 @@ def plot_editing_summary(
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     if recoding_mode:
-        # plt.savefig(fig_root + "/a10.Edit_type_summary.pdf", bbox_inches='tight')
+        # plt.savefig(fig_root + "/a8.Edit_type_summary.pdf", bbox_inches='tight')
         # if produce_png:
-        plt.savefig(fig_root + "/a10.Edit_type_summary.png", bbox_inches='tight', dpi=300)
+        plt.savefig(fig_root + "/a8.Edit_type_summary.png", bbox_inches='tight', dpi=300)
     elif run_label == "a":
-        # plt.savefig(fig_root + "/a10.a.Edit_type_summary.pdf", bbox_inches='tight')
+        # plt.savefig(fig_root + "/a8.a.Edit_type_summary.pdf", bbox_inches='tight')
         # if produce_png:
-        plt.savefig(fig_root + "/a10.a.Edit_type_summary.png", bbox_inches='tight', dpi=300)
+        plt.savefig(fig_root + "/a8.a.Edit_type_summary.png", bbox_inches='tight', dpi=300)
     elif run_label == "b":
-        # plt.savefig(fig_root + "/a10.b.Edit_type_summary.pdf", bbox_inches='tight')
+        # plt.savefig(fig_root + "/a8.b.Edit_type_summary.pdf", bbox_inches='tight')
         # if produce_png:
-        plt.savefig(fig_root + "/a10.b.Edit_type_summary.png", bbox_inches='tight', dpi=300)        
+        plt.savefig(fig_root + "/a8.b.Edit_type_summary.png", bbox_inches='tight', dpi=300)
+
+
+def plot_batched_category_stacked_summary_barplot(
+    counts_dicts, 
+    sample_name,
+    fig_root=None,
+    produce_png=False,
+    category_colors=None
+):
+    """
+    counts_dicts: dict of {sample_rep: counts_dict}
+        where counts_dict = {category: count}
+    """
+
+    sample_names = list(counts_dicts.keys())
+
+    # Get all unique categories across samples
+    all_categories = list(next(iter(counts_dicts.values())).keys())
+
+    # Build data matrix: rows=categories, cols=samples
+    data = []
+    for cat in all_categories:
+        row = [counts_dicts[sample].get(cat, 0) for sample in sample_names]
+        data.append(row)
+
+    data = np.array(data)
+    
+    # Sort categories by global totals across all samples
+    global_totals = data.sum(axis=1)
+    # Keep only categories that have non-zero counts across all samples
+    nonzero_mask = global_totals > 0
+
+    data = data[nonzero_mask]
+    all_categories = [cat for cat, keep in zip(all_categories, nonzero_mask) if keep]
+
+    # Recompute totals after filtering (important!)
+    global_totals = data.sum(axis=1)
+
+    sort_idx = np.argsort(global_totals)[::-1]
+
+    data = data[sort_idx]
+    all_categories = [all_categories[i] for i in sort_idx]
+
+    col_sums = data.sum(axis=0)
+    percent_data = data / col_sums * 100
+
+    fig, ax = plt.subplots(figsize=(1 + len(sample_names), 6), dpi=300)
+
+    bottoms = np.zeros(len(sample_names))
+    legend_handles = []
+    legend_labels = []
+
+    for i, cat in enumerate(all_categories):
+        vals = percent_data[i]
+        color = category_colors.get(cat, "black") if category_colors else None
+
+        bars = ax.bar(
+            sample_names,
+            vals,
+            bottom=bottoms,
+            label=cat,
+            color=color,
+            edgecolor='white',
+            linewidth=0.3
+        )
+
+        bottoms += vals
+
+        # store for custom legend ordering
+        legend_handles.append(bars[0])
+        legend_labels.append(cat)
+
+    # Add total read count above bars
+    for i, total in enumerate(col_sums):
+        ax.text(
+            i,
+            101,
+            f"{int(total):,}",
+            ha='center',
+            va='bottom',
+            fontsize=7
+        )
+
+    ax.set_ylabel("Percent of Reads (%)", fontsize=8)
+    ax.set_ylim(0, 105)
+    ax.set_xlabel(sample_name, fontsize=8)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    ax.minorticks_on()
+    ax.tick_params(axis="x", labelsize=8, rotation=0)
+    ax.tick_params(axis="y", labelsize=8)
+    ax.tick_params(axis="x", which="minor", bottom=False)
+
+    # Legend matches stack order
+    ax.legend(
+        legend_handles[::-1],
+        legend_labels[::-1],
+        bbox_to_anchor=(1.02, 0.5),
+        loc="center left",
+        fontsize=8
+    )
+
+    plt.savefig(fig_root + "/a12.Batch_category_summary_stacked.png", bbox_inches='tight', dpi=300)        
 
 
 
@@ -4156,7 +4629,7 @@ def plot_categorical_allele_tables(
         )
 
 
-def build_combined_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="TwInsPEctor_report.html"):
+def build_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="TwInsPEctor_report.html"):
     """
     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
     """
@@ -4252,24 +4725,26 @@ def build_combined_html_report(twinpe_8cat_results_folder, parent_folder, html_f
 
     # Second special card: a5, a6, a10.a
     group2_files = [
-        "a5.TPE_profile_all_reads.png",
-        "a6.TPE_profile_edited_reads.png",
-        "a10.a.Edit_type_summary.png",
+        "a4.3'_flap_integration_all_reads.png",
+        "a5.3'_flap_integration_edited_reads.png",
+        "a6.5'_flap_removal_all_reads.png",
+        "a7.5'_flap_removal_edited_reads.png",
+        "a8.a.Edit_type_summary.png",
     ]
 
     existing_group2 = [f for f in group2_files if f in images]
     if existing_group2:
         _make_special_group(
-            "a5-6-10.TPE_profiles",
+            "a4-8.TPE_profiles",
             "Editing Per Base",
             existing_group2,
-            ["All reads", "Edited reads", "Edit type - Full edit"][:len(existing_group2)],
+            ["3' Flaps - All reads", "3' Flaps - Edited reads", "5' Flaps - All reads", "5' Flaps - Edited reads", "Edit type - Full edit"][:len(existing_group2)],
         )
 
     group3_files = [
-        "a7.Total_TPEs_vs_indels.png",
-        "a8.Left_TPEs_vs_indels.png",
-        "a9.Right_TPEs_vs_indels.png",
+        "a9.Total_TPEs_vs_indels.png",
+        "a10.Left_TPEs_vs_indels.png",
+        "a11.Right_TPEs_vs_indels.png",
     ]
     existing_group3 = [f for f in group3_files if f in images]
     if existing_group3:
@@ -4466,10 +4941,10 @@ def build_combined_html_report(twinpe_8cat_results_folder, parent_folder, html_f
           <path d="
             M24 27
             C37 16, 47 13, 57 19
-            S79 34, 87 25
-            L85 30
-            C74 41, 61 30, 54 24
-            S37 19, 25 27
+            S75 30, 80 28
+            C83 28, 85 32, 81 34
+            C71 41, 62 31, 53 25
+            S40 19, 26 26
             Z
           " fill="black"/>
         </svg>
