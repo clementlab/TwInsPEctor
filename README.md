@@ -64,7 +64,8 @@ pip install .
 | `-mnr`, `--max_n_rows` | maximum number of allele rows displayed in tables. | `50` |
 | `-nrr`, `--no_rerun` | do not rerun CRISPResso2 if the same parameters were already completed. | off |
 | `-kco`, `--keep_crispresso_outputs` | preserve CRISPResso2 output folders after analysis. | off |
-| `-ts`, `--trim_string` | string to trim reads using fastp within CRISPResso2 before analysis. | None |
+| `-ts`, `--trim_string` | string to trim reads using fastp with override options within CRISPResso2 before analysis. | None |
+| `-fp`, `--fastp_command` | command to run fastp for read trimming within CRISPResso2 before analysis. | None |
 
 ### Usage
 
