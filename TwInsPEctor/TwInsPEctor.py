@@ -1935,7 +1935,7 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
         "Right_Flap": 6,
         "Left_Flap": 6,
         "Imperfect_TPE": 5,
-        "Imperfect_WT": 7,
+        # "Imperfect_WT": 7,
     }
 
     DEFAULT_PRIORITY = 9
