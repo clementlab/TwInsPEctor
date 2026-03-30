@@ -142,8 +142,8 @@ def parse_args():
     parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables.")
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
-    parser.add_argument("-ts", "--trim_string", type=str, default=None, help="String to trim reads using fastp within CRISPResso2 before analysis.")
-    parser.add_argument("-fp", "--fastp_command", type=str, default=None, help="Command to run fastp for read trimming within CRISPResso2.")
+    parser.add_argument("-ts", "--trim_string", type=str, default=None, help="String to trim reads using fastp with override options within CRISPResso2 before analysis.")
+    parser.add_argument("-fp", "--fastp_command", type=str, default=None, help="Command to run fastp for read trimming within CRISPResso2 before analysis.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
 
@@ -1921,7 +1921,7 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
     )
 
     # Determine if alignment scores are close
-    FLAP_SCORE_DELTA = 5
+    FLAP_SCORE_DELTA = 99
     scores_close = (ref_a - ref_b).abs() <= FLAP_SCORE_DELTA
 
     imperfect_mask = flap_pair & scores_close
@@ -1932,10 +1932,10 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
         "TPE_Indel": 2,
         "WT": 3,
         "WT_Indel": 4,
-        "Right_Flap": 5,
-        "Left_Flap": 5,
+        "Right_Flap": 6,
+        "Left_Flap": 6,
         "Imperfect_TPE": 5,
-        # "Imperfect_WT": 6,
+        "Imperfect_WT": 7,
     }
 
     DEFAULT_PRIORITY = 9
@@ -2528,7 +2528,7 @@ def plot_total_read_counts_del_region(
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect WT"], alpha=1.0)
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
     # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
     ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
     ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
@@ -2672,14 +2672,14 @@ def plot_edit_read_counts_del_region(
     fig_width = max(6, n * width_per_base)
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect WT"], alpha=1.0)  # If useful needs to be tracked is new array with del length
+    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)  # If useful needs to be tracked is new array with del length
     # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
     ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
     ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
     ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=12)
+    ax.set_ylabel("Read Counts", fontsize=22)
 
     ax.set_xticks(indices)
 
@@ -2739,7 +2739,7 @@ def plot_edit_read_counts_del_region(
             "Endogenous Sequence (recoded)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=22,
             color="black",
             clip_on=False
         )
@@ -2758,7 +2758,7 @@ def plot_edit_read_counts_del_region(
             "Endogenous Sequence (deleted)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=22,
             color="black",
             clip_on=False
         )
@@ -2777,14 +2777,14 @@ def plot_edit_read_counts_del_region(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=22, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=12
+        fontsize=22
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
