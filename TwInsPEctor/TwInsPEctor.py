@@ -14,22 +14,53 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
-from CRISPResso2 import CRISPRessoShared
-# from CRISPResso2 import CRISPResso2Align
 from matplotlib import colors as colors_mpl
 
+# Recent CRISPresso2 update causes global style changes that break plotting
+import matplotlib as mpl
+# snapshot current rcParams before importing CRISPResso2
+_RC_BEFORE_CRISP = mpl.rcParams.copy()
+from CRISPResso2 import CRISPRessoShared
+# restore rcParams to the snapshot (undo CRISPResso2 global style changes)
+mpl.rcParams.update(_RC_BEFORE_CRISP)
+
+
+# CATEGORY_COLORS = {
+#     "Perfect TPE":  "#1f77b4", 
+#     "TPE Indel": "#9467bd", 
+#     "Left Flap": "#ff7f0e", 
+#     "Right Flap": "#2ca02c", 
+#     "Imperfect TPE": "#d62728", 
+#     "Imperfect WT": "#e377c2", 
+#     "WT Indel":   "#bcbd22", 
+#     "WT": "#8c564b", 
+#     "Uncategorized": "#7f7f7f"
+# }
 
 CATEGORY_COLORS = {
-    "Perfect TPE":  "#1f77b4", 
-    "TPE Indel": "#9467bd", 
-    "Left Flap": "#ff7f0e", 
-    "Right Flap": "#2ca02c", 
-    "Imperfect TPE": "#d62728", 
-    "Imperfect WT": "#e377c2", 
-    "WT Indel":   "#bcbd22", 
-    "WT": "#8c564b", 
-    "Uncategorized": "#7f7f7f"
+    "WT": "#b2182b",
+    "WT Indel": "#d6604d",
+    "Imperfect WT": "#f4a582",
+    "Right Flap": "#d9d9d9",
+    # "Left Flap": "#bdbdbd",
+    "Left Flap": "#9e9e9e",
+    "Imperfect TPE": "#92c5de",
+    "TPE Indel": "#4393c3",
+    "Perfect TPE": "#2166ac",
+    # "Uncategorized": "#7f7f7f"
+    "Uncategorized": "#93de92"
 }
+
+CATEGORY_ORDER = [
+    "WT", 
+    "WT Indel",
+    "Imperfect WT",
+    "Right Flap",
+    "Left Flap",
+    "Imperfect TPE", 
+    "TPE Indel",
+    "Perfect TPE"
+]
 
 ALPHA = 0.4
 
@@ -45,26 +76,26 @@ BASE_COLORS = {
 def main():
     args = parse_args()
 
-    parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder = resolve_output_folders(args, recoding_mode=args.recoding_mode)
+    parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, crispresso_output_folder, twinpe_8cat_results_folder = resolve_output_folders(args, recoding_mode=args.recoding_mode)
     os.makedirs(twinpe_8cat_results_folder, exist_ok=True)
-    spacer_a, spacer_b = get_spacers(args.peg_spacers)
+    spacer_a, spacer_b = get_spacers(args.peg_spacers, args.wt_seq)
 
-    spacer_info = find_spacers_in_references(args.wt_seq, args.twin_seq, spacer_a, spacer_b)
+    spacer_info = new_find_spacers_in_references(args.wt_seq, args.twin_seq, spacer_a, spacer_b)
     
     if args.recoding_mode:
-        crispresso_run_folder = os.path.join(parent_folder, "CRISPResso_r")
+        crispresso_run_folder = os.path.join(parent_folder)
         
-        os.makedirs(crispresso_run_folder, exist_ok=True)
+        os.makedirs(crispresso_output_folder, exist_ok=True)
         
-        build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
+        new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
         
-        crispresso_cmd = build_crispresso_command(args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder)
+        crispresso_cmd = new_build_crispresso_command(args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder)
         
         print("Running CRISPResso with command:\n", " ".join(crispresso_cmd), "\n")
         subprocess.run(crispresso_cmd, check=True)
 
         print("Analyzing CRISPResso output...")
-        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder_a, args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables)
+        analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder, args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables)
         print("Finished TwinPE analysis!")
 
     else:
@@ -74,10 +105,10 @@ def main():
         os.makedirs(crispresso_output_folder_a, exist_ok=True)
         os.makedirs(crispresso_output_folder_b, exist_ok=True)
 
-        comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
+        comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
 
-        crispresso_cmd_a = build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_a, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_a_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="a")
-        crispresso_cmd_b = build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_b, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_b_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="b")
+        crispresso_cmd_a = new_build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_a, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_a_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="a")
+        crispresso_cmd_b = new_build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_b, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_b_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="b")
 
         print("Running CRISPResso with command:\n", " ".join(crispresso_cmd_a), "\n")
         subprocess.run(crispresso_cmd_a, check=True)
@@ -161,13 +192,52 @@ def reverse_complement(seq):
     return ''.join(complement.get(base, base) for base in reversed(seq.upper()))
 
 
-def get_spacers(peg_spacers_arg):
+def get_spacers(peg_spacers_arg, wt_seq):
     spacers = [s.strip() for s in peg_spacers_arg.split(",")]
     if len(spacers) != 2:
         raise ValueError("peg_spacers argument must be two comma-separated sequences")
     spacer_a, spacer_b = spacers
+    spacer_a = spacer_a.upper()
+    spacer_b = spacer_b.upper()
 
-    return spacer_a.upper(), spacer_b.upper()
+    if wt_seq.find(spacer_a) == -1:
+        spacer_a = reverse_complement(spacer_a)
+        if wt_seq.find(spacer_a) == -1:
+            raise ValueError("Could not find spacer A or its reverse complement in WT sequence")
+    if wt_seq.find(spacer_b) == -1:
+        spacer_b = reverse_complement(spacer_b)
+        if wt_seq.find(spacer_b) == -1:
+            raise ValueError("Could not find spacer B or its reverse complement in WT sequence")
+
+    return spacer_a, spacer_b
+
+
+def new_find_spacers_in_references(wt_seq, twin_seq, spacer_a, spacer_b, recoding_mode=False):
+    """
+    Assumes nick site is before last 3 bases of spacer_a and after 3 bases of spacer_b
+    """
+    spacer_a_index_wt = wt_seq.find(spacer_a)
+    spacer_a_rc = False
+    spacer_a_num_bases_removed = 3
+    spacer_a_index_twin = twin_seq.find(spacer_a[:-spacer_a_num_bases_removed])
+
+    spacer_b_index_wt = wt_seq.find(spacer_b)
+    spacer_b_rc = False
+    spacer_b_num_bases_removed = 3
+    spacer_b_index_twin = twin_seq.find(spacer_b[spacer_b_num_bases_removed:])
+    
+    results = {
+        "spacer_a_index_wt": spacer_a_index_wt,
+        "spacer_b_index_wt": spacer_b_index_wt,
+        "spacer_a_index_twin": spacer_a_index_twin,
+        "spacer_b_index_twin": spacer_b_index_twin,
+        "spacer_a_rc": spacer_a_rc,
+        "spacer_b_rc": spacer_b_rc,
+        "spacer_a_num_bases_removed": spacer_a_num_bases_removed,
+        "spacer_b_num_bases_removed": spacer_b_num_bases_removed
+    }
+
+    return results
 
 
 def find_spacers_in_references(wt_seq, twin_seq, spacer_a, spacer_b, recoding_mode=False):
@@ -246,6 +316,60 @@ def find_spacers_in_references(wt_seq, twin_seq, spacer_a, spacer_b, recoding_mo
     }
 
     return results
+
+
+def new_build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, spacer_info, output_root, recoding_mode=False):
+    """
+    Requires that wt_seq and twin_seq share identical 5' and 3' anchors. Doesn't return output in recoding mode.
+    """
+    if recoding_mode:
+        with open(
+            os.path.join(output_root, "c5.aligned_reference_sequences.txt"), "w"
+        ) as fout:
+            fout.write(f"@Alignment\n")
+            fout.write(f">Wildtype_reference_sequence\n{wt_seq}\n")
+            fout.write(f">TwinPE_reference_sequence\n{twin_seq}\n\n")
+            fout.write(f"@pegRNA Spacers\n")
+            fout.write(f">SpacerA_sequence\n{spacer_a}\n")
+            fout.write(f">SpacerB_sequence\n{spacer_b}\n")
+    else:
+        spacer_a_nick_site_wt = spacer_info['spacer_a_index_wt'] + len(spacer_a) - spacer_info['spacer_a_num_bases_removed']
+        spacer_b_nick_site_wt = spacer_info['spacer_b_index_wt'] + spacer_info['spacer_b_num_bases_removed']
+        spacer_a_nick_site_twin = spacer_info['spacer_a_index_twin'] + len(spacer_a) - spacer_info['spacer_a_num_bases_removed']
+        spacer_b_nick_site_twin = spacer_info['spacer_b_index_twin']
+
+        prefix = wt_seq[:spacer_a_nick_site_wt]
+        suffix = wt_seq[spacer_b_nick_site_wt:]
+        wt_deleted_seq = wt_seq[spacer_a_nick_site_wt:spacer_b_nick_site_wt]
+        twin_inserted_seq = twin_seq[spacer_a_nick_site_twin:spacer_b_nick_site_twin]
+
+        comp_ref_seq_a = prefix + wt_deleted_seq + twin_inserted_seq + suffix
+        comp_ref_seq_b = prefix + twin_inserted_seq + wt_deleted_seq + suffix
+        wt_aln_seq_a = prefix + wt_deleted_seq + len(twin_inserted_seq) * '-' + suffix
+        wt_aln_seq_b = prefix + len(twin_inserted_seq) * '-' + wt_deleted_seq + suffix
+        twin_aln_seq_a = prefix + len(wt_deleted_seq) * '-' + twin_inserted_seq + suffix
+        twin_aln_seq_b = prefix + twin_inserted_seq + len(wt_deleted_seq) * '-' + suffix
+        
+        # validate lengths
+        if not (len(comp_ref_seq_a) == len(wt_aln_seq_a) == len(twin_aln_seq_a) == len(comp_ref_seq_b) == len(wt_aln_seq_b) == len(twin_aln_seq_b)):
+            raise ValueError("Compound references, WT alignments, and Twin alignments are not the same length")
+        
+        with open(
+            os.path.join(output_root, "c5.aligned_reference_sequences.txt"), "w"
+        ) as fout:
+            fout.write(f"@Alignment A\n")
+            fout.write(f">Wildtype_reference_sequence\n{wt_aln_seq_a}\n")
+            fout.write(f">Compound_reference_sequence\n{comp_ref_seq_a}\n")
+            fout.write(f">TwinPE_reference_sequence\n{twin_aln_seq_a}\n\n")
+            fout.write(f"@Alignment B\n")
+            fout.write(f">Wildtype_reference_sequence\n{wt_aln_seq_b}\n")
+            fout.write(f">Compound_reference_sequence\n{comp_ref_seq_b}\n")
+            fout.write(f">TwinPE_reference_sequence\n{twin_aln_seq_b}\n\n")
+            fout.write(f"@pegRNA Spacers\n")
+            fout.write(f">SpacerA_sequence\n{spacer_a}\n")
+            fout.write(f">SpacerB_sequence\n{spacer_b}\n")
+
+        return comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b
 
 
 def build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, spacer_info, output_root, recoding_mode=False):
@@ -330,35 +454,101 @@ def resolve_output_folders(args, recoding_mode=False):
     pattern = r'([^/]+?)(?=(?:\.fastq|\.fq)?(?:\.gzip|\.gz|\.bz2|\.bz|\.xz|\.lzma)?$)'
     r1m = re.search(pattern, r1)
     r2m = re.search(pattern, r2) if r2 else None
+    crispresso_output_folder_a = None
+    crispresso_output_folder_b = None
+    crispresso_output_folder = None
     if args.output_root:
         # If output_folder is provided in command args
         # Use that as the parent folder for CRISPResso output and TwinPE 8cat results
         parent_folder = os.path.join(os.getcwd(), args.output_root.rstrip("/"))
         # Mimic CRISPResso output folder naming conventions to get correct path
         if r1m and r2m:
-            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            if recoding_mode:
+                crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            else:
+                crispresso_output_folder_a = os.path.join(parent_folder, "CRISPResso_a", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+                crispresso_output_folder_b = os.path.join(parent_folder, "CRISPResso_b", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
-            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}")
+            if recoding_mode:
+                crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}")
+            else:
+                crispresso_output_folder_a = os.path.join(parent_folder, "CRISPResso_a", f"CRISPResso_on_{r1m.group(1)}")
+                crispresso_output_folder_b = os.path.join(parent_folder, "CRISPResso_b", f"CRISPResso_on_{r1m.group(1)}")
         else:   
             raise ValueError("Could not parse fastq file names for output folder naming.")
     else:
         # If output_folder not provided, create own
         if r1m and r2m:
             parent_folder = os.path.join(os.getcwd(), f"TwInsPEctor_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            if recoding_mode:
+                crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+            else:
+                crispresso_output_folder_a = os.path.join(parent_folder, "CRISPResso_a", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
+                crispresso_output_folder_b = os.path.join(parent_folder, "CRISPResso_b", f"CRISPResso_on_{r1m.group(1)}_{r2m.group(1)}")
         elif r1m and not r2m:
             parent_folder = os.path.join(os.getcwd(), f"TwInsPEctor_{r1m.group(1)}")
-            crispresso_output_folder_a = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_a"]), f"CRISPResso_on_{r1m.group(1)}")
-            crispresso_output_folder_b = os.path.join(parent_folder, *([] if recoding_mode else ["CRISPResso_b"]), f"CRISPResso_on_{r1m.group(1)}")
+            if recoding_mode:
+                crispresso_output_folder = os.path.join(parent_folder, f"CRISPResso_on_{r1m.group(1)}")
+            else:
+                crispresso_output_folder_a = os.path.join(parent_folder, "CRISPResso_a", f"CRISPResso_on_{r1m.group(1)}")
+                crispresso_output_folder_b = os.path.join(parent_folder, "CRISPResso_b", f"CRISPResso_on_{r1m.group(1)}")
         else:
             raise ValueError("Could not parse fastq file names for output folder naming.")
         
-    twinpe_8cat_results_folder = os.path.join(parent_folder, "TwInsPEctor_outputs")
+    twinpe_8cat_results_folder = os.path.join(parent_folder, "TwInsPEctor")
 
-    return parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, twinpe_8cat_results_folder
+    return parent_folder, crispresso_output_folder_a, crispresso_output_folder_b, crispresso_output_folder, twinpe_8cat_results_folder
+
+
+def new_build_crispresso_command(args=None, comp_ref_seq=None, wt_seq=None, twin_seq=None, spacer_a=None, spacer_b=None, crispresso_output_folder=None, spacer_info=None, twinpe_8cat_output_folder=None, run_label=None):
+    if run_label == "a":
+        first_spacer = spacer_a
+        second_spacer = spacer_b[spacer_info['spacer_b_num_bases_removed']:]
+    elif run_label == "b":
+        first_spacer = spacer_a[:len(spacer_a)-spacer_info['spacer_a_num_bases_removed']]
+        second_spacer = spacer_b
+    else:
+        first_spacer = spacer_a
+        second_spacer = spacer_b
+    # May want to wrap in all CRISPResso parameters or remove some of the hardcoded ones below
+    cmd = [
+        "CRISPResso",
+        "--fastq_r1", args.fastq_r1,
+        "--amplicon_seq", f"{args.wt_seq},{args.twin_seq}" if args.recoding_mode else comp_ref_seq,
+        "--amplicon_name", f"WT,TwinPE" if args.recoding_mode else "Compound",
+        "--guide_seq", f"{first_spacer},{second_spacer}", 
+        "--default_min_aln_score", str(args.default_min_aln_score), 
+        "--min_frequency_alleles_around_cut_to_plot", str(args.min_frequency_alleles), 
+        "--max_rows_alleles_around_cut_to_plot", str(args.max_n_rows), 
+        "--write_detailed_allele_table",
+    ]
+
+    cmd.extend(["--output_folder", crispresso_output_folder])
+
+    if args.fastq_r2:
+        cmd.extend(["--fastq_r2", args.fastq_r2])
+    if args.no_rerun:
+        cmd.append("--no_rerun")
+    if args.trim_string:
+        cmd.extend(["--trim_sequences"])
+        cmd.extend(["--fastp_options_string", f"{args.trim_string}"])
+    if args.fastp_command:
+        cmd.extend(["--fastp_command", args.fastp_command])
+    if args.debug:
+        cmd.append("--debug")
+
+    if args.recoding_mode:
+        with open(
+            os.path.join(twinpe_8cat_output_folder, "c6.crispresso2_command.txt"), "w"
+        ) as fout:
+            fout.write(" ".join(cmd) + "\n")
+    else:
+        with open(
+            os.path.join(twinpe_8cat_output_folder, "c6.crispresso2_command_a.txt" if run_label == "a" else "c7.crispresso2_command_b.txt"), "w"
+        ) as fout:
+            fout.write(" ".join(cmd) + "\n")
+
+    return cmd
 
 
 def build_crispresso_command(args=None, comp_ref_seq=None, wt_seq=None, twin_seq=None, spacer_a=None, spacer_b=None, crispresso_output_folder=None, spacer_info=None, twinpe_8cat_output_folder=None, run_label=None):
@@ -489,17 +679,32 @@ def analyze_visualize_sample(
         args.produce_png
     )
 
-    plot_per_base_pos_barplots(
-        results_final=results_final, 
-        twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
-        del_len=results_final["del_len"] if not args.recoding_mode else None, 
-        ins_len=results_final["ins_len"] if not args.recoding_mode else None,
-        insert_sequence=df_alleles_a["insert_sequence"], 
-        deletion_sequence=df_alleles_a["deletion_sequence"],
-        deletion_insertion_sequence=df_alleles_a["deletion_insertion_sequence"],
-        recoding_mode=args.recoding_mode, 
-        produce_png=args.produce_png
-    )
+    if args.recoding_mode:
+        plot_per_base_pos_barplots(
+            results_final=results_final, 
+            twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
+            del_len=None, 
+            ins_len=None,
+            insert_sequence=None, 
+            deletion_sequence=None,
+            deletion_insertion_sequence=None, 
+            bp_changes_arr=results_final["bp_changes_arr"], # TODO: need to implment recoding_mode sequence support for newer bar plots.
+            recoding_mode=args.recoding_mode, 
+            produce_png=args.produce_png
+        )
+
+    else:
+        plot_per_base_pos_barplots(
+            results_final=results_final, 
+            twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
+            del_len=results_final["del_len"], 
+            ins_len=results_final["ins_len"],
+            insert_sequence=df_alleles_a["insert_sequence"], 
+            deletion_sequence=df_alleles_a["deletion_sequence"],
+            deletion_insertion_sequence=df_alleles_a["deletion_insertion_sequence"],
+            recoding_mode=args.recoding_mode, 
+            produce_png=args.produce_png
+        )
 
     if not skip_allele_tables:
         print("Generating allele tables...")
@@ -590,7 +795,7 @@ def plot_summary_barplots(folder_category_counts, crispresso_output_folder_a, tw
     )
     
 
-def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, insert_sequence=None, deletion_sequence=None, deletion_insertion_sequence=None, recoding_mode=False, produce_png=False,):
+def plot_per_base_pos_barplots(results_final, twinpe_8cat_results_folder=None,  del_len=None, ins_len=None, insert_sequence=None, deletion_sequence=None, deletion_insertion_sequence=None, bp_changes_arr=None, recoding_mode=False, produce_png=False,):
     
     # This plot may not be useful
     # plot_successful_twin_edit_counts_by_category(
@@ -1921,7 +2126,7 @@ def resolve_allele_categories(df_alleles_a, df_alleles_b):
     )
 
     # Determine if alignment scores are close
-    FLAP_SCORE_DELTA = 99
+    FLAP_SCORE_DELTA = 99 # still testing - not sure if necessary
     scores_close = (ref_a - ref_b).abs() <= FLAP_SCORE_DELTA
 
     imperfect_mask = flap_pair & scores_close
@@ -2070,7 +2275,7 @@ def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict,
 
     axes[0].text(x[0], total, f"{total:,}", ha='center', va='bottom', fontsize=8)
 
-    bar2 = axes[1].bar([0], unaligned_count, color='lightgrey')
+    bar2 = axes[1].bar([0], unaligned_count, color='black')
 
     axes[1].text([0][0], unaligned_count, f"{unaligned_count:,}", ha='center', va='bottom', fontsize=8)
 
@@ -2247,12 +2452,12 @@ def plot_total_read_counts(
 
     ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap Integration From Right", alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap Integration From Left", alpha=0.7)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap Integration From Left", alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap Integration From Right", alpha=0.75)
     ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("All Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=12)
+    ax.set_ylabel("Read Counts", fontsize=16)
 
     max_height = max(total_counts)
 
@@ -2310,7 +2515,7 @@ def plot_total_read_counts(
             "Programmed Sequence (recoded)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=16,
             color="black",
             clip_on=False
         )
@@ -2329,7 +2534,7 @@ def plot_total_read_counts(
             "Programmed Sequence (inserted)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=16,
             color="black",
             clip_on=False
         )
@@ -2348,21 +2553,21 @@ def plot_total_read_counts(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=12
+        fontsize=16
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     # plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.png", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts(
@@ -2384,12 +2589,12 @@ def plot_edit_read_counts(
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Right", color=category_colors["Right Flap"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Left", color=category_colors["Left Flap"], alpha=0.75)
+    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Left", color=category_colors["Left Flap"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous 3'-Flap Integration From Right", color=category_colors["Right Flap"], alpha=0.75)
     ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=12)
+    ax.set_ylabel("Read Counts", fontsize=18)
 
     ax.set_xticks(indices)
 
@@ -2449,7 +2654,7 @@ def plot_edit_read_counts(
             "Programmed Sequence (recoded)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=18,
             color="black",
             clip_on=False
         )
@@ -2468,7 +2673,7 @@ def plot_edit_read_counts(
             "Programmed Sequence (inserted)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=18,
             color="black",
             clip_on=False
         )
@@ -2487,14 +2692,14 @@ def plot_edit_read_counts(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=12
+        fontsize=18
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
@@ -2530,12 +2735,12 @@ def plot_total_read_counts_del_region(
     ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
     # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
+    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=0.75)
     ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=12)
+    ax.set_ylabel("Read Counts", fontsize=28)
 
     ax.set_xticks(indices)
 
@@ -2595,7 +2800,7 @@ def plot_total_read_counts_del_region(
             "Endogenous Sequence (recoded)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=28,
             color="black",
             clip_on=False
         )
@@ -2614,7 +2819,7 @@ def plot_total_read_counts_del_region(
             "Endogenous Sequence (deleted)",
             ha="center",
             va="top",
-            fontsize=12,
+            fontsize=28,
             color="black",
             clip_on=False
         )
@@ -2633,21 +2838,21 @@ def plot_total_read_counts_del_region(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=12, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=28, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=12
+        fontsize=28
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     # plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.png", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts_del_region(
@@ -2674,12 +2879,12 @@ def plot_edit_read_counts_del_region(
 
     ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)  # If useful needs to be tracked is new array with del length
     # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=.7)
+    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=0.75)
     ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=22)
+    ax.set_ylabel("Read Counts", fontsize=18)
 
     ax.set_xticks(indices)
 
@@ -2739,7 +2944,7 @@ def plot_edit_read_counts_del_region(
             "Endogenous Sequence (recoded)",
             ha="center",
             va="top",
-            fontsize=22,
+            fontsize=18,
             color="black",
             clip_on=False
         )
@@ -2758,7 +2963,7 @@ def plot_edit_read_counts_del_region(
             "Endogenous Sequence (deleted)",
             ha="center",
             va="top",
-            fontsize=22,
+            fontsize=18,
             color="black",
             clip_on=False
         )
@@ -2777,14 +2982,14 @@ def plot_edit_read_counts_del_region(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=22, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=22
+        fontsize=18
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
@@ -3205,100 +3410,187 @@ def plot_editing_summary(
         plt.savefig(fig_root + "/a8.b.Edit_type_summary.png", bbox_inches='tight', dpi=300)
 
 
-def plot_batched_category_stacked_summary_barplot(
+def plot_batch_category_stacked_summary(
     counts_dicts, 
-    sample_name,
+    fig_name,
     fig_root=None,
     produce_png=False,
-    category_colors=None
+    category_colors=None, 
+    category_order=None
 ):
     """
-    counts_dicts: dict of {sample_rep: counts_dict}
-        where counts_dict = {category: count}
+    counts_dicts: {sample: {rep: {category: count}}}
     """
 
-    sample_names = list(counts_dicts.keys())
+    samples = list(counts_dicts.keys())
 
-    # Get all unique categories across samples
-    all_categories = list(next(iter(counts_dicts.values())).keys())
+    # Flatten sample/rep structure
+    bar_labels = []
+    bar_to_sample = []
+    flat_counts = []
 
-    # Build data matrix: rows=categories, cols=samples
+    for sample in samples:
+        reps = counts_dicts[sample]
+        for rep in reps:
+            bar_labels.append(rep)
+            bar_to_sample.append(sample)
+            flat_counts.append(reps[rep])
+
+    # Get categories
+    all_categories = list(next(iter(flat_counts)).keys())
+
+    # Build data matrix
     data = []
     for cat in all_categories:
-        row = [counts_dicts[sample].get(cat, 0) for sample in sample_names]
+        row = [counts.get(cat, 0) for counts in flat_counts]
         data.append(row)
 
     data = np.array(data)
-    
-    # Sort categories by global totals across all samples
+
+    # Filter zero categories
     global_totals = data.sum(axis=1)
-    # Keep only categories that have non-zero counts across all samples
     nonzero_mask = global_totals > 0
 
     data = data[nonzero_mask]
     all_categories = [cat for cat, keep in zip(all_categories, nonzero_mask) if keep]
 
-    # Recompute totals after filtering (important!)
-    global_totals = data.sum(axis=1)
+    # Sort categories
+    if category_order is not None:
+        # Keep only categories that exist
+        ordered = [cat for cat in category_order if cat in all_categories]
 
-    sort_idx = np.argsort(global_totals)[::-1]
+        # Map current indices
+        idx_map = {cat: i for i, cat in enumerate(all_categories)}
 
-    data = data[sort_idx]
-    all_categories = [all_categories[i] for i in sort_idx]
+        # Reorder data to match EXACT manual order
+        sort_idx = [idx_map[cat] for cat in ordered]
 
+        data = data[sort_idx]
+        all_categories = ordered
+    else:
+        global_totals = data.sum(axis=1)
+        sort_idx = np.argsort(global_totals)[::-1]
+
+        data = data[sort_idx]
+        all_categories = [all_categories[i] for i in sort_idx]
+
+    # Normalize to percent
     col_sums = data.sum(axis=0)
     percent_data = data / col_sums * 100
 
-    fig, ax = plt.subplots(figsize=(1 + len(sample_names), 6), dpi=300)
+    # X positions with grouping
+    x_positions = []
+    group_centers = []
+    current_x = 0
+    # gap = 1.0  # space between samples
+    gap = 1
 
-    bottoms = np.zeros(len(sample_names))
+    idx = 0
+    for sample in samples:
+        reps = list(counts_dicts[sample].keys())
+        n = len(reps)
+
+        # xs = list(np.arange(current_x, current_x + n))
+        xs = list(range(current_x, current_x + n))
+        x_positions.extend(xs)
+
+        group_centers.append(np.mean(xs))
+
+        current_x += n + gap
+
+        idx += n
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(1 + len(x_positions), 5), dpi=300)
+
+    bottoms = np.zeros(len(x_positions))
     legend_handles = []
     legend_labels = []
 
-    for i, cat in enumerate(all_categories):
-        vals = percent_data[i]
-        color = category_colors.get(cat, "black") if category_colors else None
+    min_pct_for_label = 0.95
+
+    for i, cat in enumerate(all_categories[::-1]):
+        vals = percent_data[::-1][i]
+        color = category_colors.get(cat, None) if category_colors else None
 
         bars = ax.bar(
-            sample_names,
+            x_positions,
             vals,
             bottom=bottoms,
-            label=cat,
             color=color,
             edgecolor='white',
-            linewidth=0.3
+            linewidth=0.3,
+            width=0.75
         )
 
-        bottoms += vals
-
-        # store for custom legend ordering
         legend_handles.append(bars[0])
         legend_labels.append(cat)
 
-    # Add total read count above bars
-    for i, total in enumerate(col_sums):
-        ax.text(
-            i,
-            101,
-            f"{int(total):,}",
-            ha='center',
-            va='bottom',
-            fontsize=7
-        )
+        # Labels
+        for j, (x, pct) in enumerate(zip(x_positions, vals)):
+            if pct >= min_pct_for_label:
+                if pct >= 2.95:
+                    fs = 6
+                elif pct >= 1.95:
+                    fs = 5
+                elif pct >= 1.4:
+                    fs = 4
+                elif pct >= 1.2:
+                    fs = 3
+                else:
+                    fs = 2.5
+                ax.text(
+                    x,
+                    bottoms[j] + pct / 2,
+                    f"{pct:.1f}",
+                    ha='center',
+                    va='center',
+                    # fontsize=6 if pct >= 2.9 else 4
+                    fontsize=fs
+                    # fontsize=6
+                )
+
+        # for j, (bar, pct) in enumerate(zip(bars, vals)):
+        #     if pct >= min_pct_for_label:
+        #         # Inside label
+        #         ax.text(
+        #             bar.get_x() + bar.get_width() / 2,
+        #             bottoms[j] + pct / 2,
+        #             f"{pct:.1f}%",
+        #             ha='center',
+        #             va='center',
+        #             fontsize=6,
+        #             color='black'
+        #         )
+        #     elif pct >= 1 and pct < min_pct_for_label:
+        #         # Outside label (to the right of the bar)
+        #         ax.text(
+        #             bar.get_x() + bar.get_width(),  # small horizontal offset
+        #             bottoms[j] + pct / 2,
+        #             f"{pct:.1f}%",
+        #             ha='left',
+        #             va='center',
+        #             fontsize=6,
+        #             color='black'
+        #         )
+
+        bottoms += vals
 
     ax.set_ylabel("Percent of Reads (%)", fontsize=8)
     ax.set_ylim(0, 105)
-    ax.set_xlabel(sample_name, fontsize=8)
+
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(bar_labels, fontsize=7, rotation=0)
+
+    # Sample labels (group level)
+    for center, sample in zip(group_centers, samples):
+        ax.text(center, -10, sample, ha='center', va='top', fontsize=8)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
-    ax.minorticks_on()
-    ax.tick_params(axis="x", labelsize=8, rotation=0)
     ax.tick_params(axis="y", labelsize=8)
-    ax.tick_params(axis="x", which="minor", bottom=False)
 
-    # Legend matches stack order
     ax.legend(
         legend_handles[::-1],
         legend_labels[::-1],
@@ -3307,8 +3599,11 @@ def plot_batched_category_stacked_summary_barplot(
         fontsize=8
     )
 
-    plt.savefig(fig_root + "/a12.Batch_category_summary_stacked.png", bbox_inches='tight', dpi=300)        
+    # plt.savefig(fig_name + ".svg", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_name + ".pdf", bbox_inches='tight', dpi=300)
 
+    plt.tight_layout()
+    plt.show()      
 
 
 # def plot_nonprogrammed_edit_counts(full_deletion_counts, full_insertion_counts, full_substitution_counts, ins_start, ins_end, del_start, del_end, fig_root=None, produce_png=False):
@@ -4512,6 +4807,46 @@ def plot_categorical_allele_tables(
     recoding_mode=False, 
     run_label=None
 ):
+    # """ """
+    # # Ensure names
+    # if pegRNA_names == ["", ""]:
+    #     pegRNA_names = ["pegRNA", "pegRNA"]
+
+    # # Compute b_extra once
+    # if not recoding_mode:
+    #     if spacer_info['spacer_a_index_wt'] < spacer_info['spacer_b_index_wt']:
+    #         b_extra = spacer_info['spacer_b_num_bases_removed']
+    #     else:
+    #         b_extra = spacer_info['spacer_a_num_bases_removed']
+
+    # # Do NOT mutate pegRNA_cut_points in place; make ordered, adjusted copies per plot
+    # # Build a single ordering for intervals and keep related arrays consistent
+    # order = None
+    # if pegRNA_intervals and len(pegRNA_intervals) == 2:
+    #     order = np.argsort([x[0] for x in pegRNA_intervals])
+    #     intervals_ordered = [pegRNA_intervals[i] for i in order]
+    #     cut_points_ordered = [pegRNA_cut_points[i] for i in order]
+    #     plot_cut_points_ordered = [pegRNA_plot_cut_points[i] for i in order]
+    #     mismatches_ordered = [pegRNA_mismatches[i] for i in order] if pegRNA_mismatches else pegRNA_mismatches
+    #     names_ordered = [pegRNA_names[i] for i in order] if pegRNA_names else pegRNA_names
+    # else:
+    #     intervals_ordered = pegRNA_intervals
+    #     cut_points_ordered = pegRNA_cut_points if isinstance(pegRNA_cut_points, list) else [pegRNA_cut_points]
+    #     plot_cut_points_ordered = pegRNA_plot_cut_points
+    #     mismatches_ordered = pegRNA_mismatches
+    #     names_ordered = pegRNA_names
+
+    # # Adjust second cut point (post-ordering)
+    # if cut_points_ordered and len(cut_points_ordered) == 2 and run_label == "a":
+    #     # cut_points_adjusted = [cut_points_ordered[0], cut_points_ordered[1] - b_extra if not recoding_mode else cut_points_ordered[1]]
+    #     cut_points_adjusted = [cut_points_ordered[0], cut_points_ordered[1] - b_extra]
+    # elif cut_points_ordered and len(cut_points_ordered) == 2 and run_label == "b":
+    #     # cut_points_adjusted = [cut_points_ordered[0] - b_extra if not recoding_mode else cut_points_ordered[1], cut_points_ordered[1]]
+    #     cut_points_adjusted = [cut_points_ordered[0] + b_extra, cut_points_ordered[1]]
+    # else:
+    #     cut_points_adjusted = cut_points_ordered
+
+    #### Updated method
     """ """
     # Ensure names
     if pegRNA_names == ["", ""]:
@@ -4541,15 +4876,48 @@ def plot_categorical_allele_tables(
         mismatches_ordered = pegRNA_mismatches
         names_ordered = pegRNA_names
 
-    # Adjust second cut point (post-ordering)
-    if cut_points_ordered and len(cut_points_ordered) == 2 and run_label == "a":
-        # cut_points_adjusted = [cut_points_ordered[0], cut_points_ordered[1] - b_extra if not recoding_mode else cut_points_ordered[1]]
-        cut_points_adjusted = [cut_points_ordered[0], cut_points_ordered[1] - b_extra]
-    elif cut_points_ordered and len(cut_points_ordered) == 2 and run_label == "b":
-        # cut_points_adjusted = [cut_points_ordered[0] - b_extra if not recoding_mode else cut_points_ordered[1], cut_points_ordered[1]]
-        cut_points_adjusted = [cut_points_ordered[0] + b_extra, cut_points_ordered[1]]
-    else:
-        cut_points_adjusted = cut_points_ordered
+    # Determine cut points for plotting.
+    # CRISPResso's sgRNA_cut_points depend on inferred guide orientation; when we
+    # intentionally trim/flip spacers for TwinPE, the right-hand (pegRNA B) cut
+    # can end up on the wrong end of its interval
+    #
+    # TwinPE convention in this script:
+    # - pegRNA A nick: before the last 3 bases of spacer A (near interval end)
+    # - pegRNA B nick: after the first 3 bases of spacer B (near interval start)
+    #
+    # Additionally, in non-recoding mode we trim:
+    # - Run a: spacer B is trimmed at the 5' side (removes first N bases)
+    # - Run b: spacer A is trimmed at the 3' side (removes last N bases)
+    # We convert interval coordinates back to the intended nick sites.
+    cut_points_adjusted = cut_points_ordered
+    if (
+        (not recoding_mode)
+        and intervals_ordered
+        and len(intervals_ordered) == 2
+        and spacer_info is not None
+    ):
+        # Which ordered interval corresponds to spacer A vs spacer B?
+        spacer_a_left_of_b = spacer_info.get('spacer_a_index_wt', 0) < spacer_info.get('spacer_b_index_wt', 0)
+        ordered_idx_for_a = 0 if spacer_a_left_of_b else 1
+
+        # How many bases were trimmed away from the relevant side in this run?
+        # (These are always 3 in new_find_spacers_in_references, but keep generic.)
+        trim_b_left = int(spacer_info.get('spacer_b_num_bases_removed', 0)) if run_label == 'a' else 0
+        trim_a_right = int(spacer_info.get('spacer_a_num_bases_removed', 0)) if run_label == 'b' else 0
+
+        cut_points_adjusted = []
+        for ordered_idx, (start, end_incl) in enumerate(intervals_ordered):
+            if ordered_idx == ordered_idx_for_a:
+                # Spacer A cut: before last 3 bases of the *full* spacer.
+                # If spacer A was trimmed at its right end (run b), interval end is shifted left;
+                # compensate by adding (trim_a_right - 3).
+                cp = int(end_incl) + trim_a_right - 3
+            else:
+                # Spacer B cut: after first 3 bases of the *full* spacer.
+                # If spacer B was trimmed at its left end (run a), interval start is shifted right;
+                # compensate by subtracting trim_b_left.
+                cp = int(start) - trim_b_left + 2
+            cut_points_adjusted.append(cp)
 
     for cat, name_a, name_b, name_r in [
         ("Perfect_TPE", "b1.a.Perfect_TPE", "b1.b.Perfect_TPE", "b1.Perfect_TPE"),
@@ -4595,8 +4963,8 @@ def plot_categorical_allele_tables(
             twin_aln_seq,
             cut_points_adjusted,
             window_by_intervals=not plot_full_reads, 
-            left_pad=20,
-            right_pad=20
+            left_pad=5,
+            right_pad=5
         )
 
         X, annot, y_labels, insertion_dict, per_element_annot_kws, is_reference = prep_alleles_table(
@@ -4629,7 +4997,7 @@ def plot_categorical_allele_tables(
         )
 
 
-def build_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="TwInsPEctor_report.html"):
+def build_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="TwInsPEctor.html"):
     """
     Bundle every PNG inside `twinpe_8cat_results_folder` into a single HTML report.
     """
@@ -4787,7 +5155,7 @@ def build_html_report(twinpe_8cat_results_folder, parent_folder, html_filename="
             variant_items = sorted(entry["variants"].items(), key=lambda kv: kv[0])
             for idx, (v_key, v_info) in enumerate(variant_items):
                 # point HTML to Outputs/<filename>
-                img_rel = os.path.join("TwInsPEctor_outputs", v_info["img"])
+                img_rel = os.path.join("TwInsPEctor", v_info["img"])
                 img_rel = html.escape(img_rel)
                 panel_id = f"panel-{uid}-{v_key}"
                 is_first = (idx == 0)
