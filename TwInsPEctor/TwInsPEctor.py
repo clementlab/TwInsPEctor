@@ -5,7 +5,6 @@ import html
 import shutil
 import zipfile
 import argparse
-import matplotlib
 import subprocess
 import numpy as np
 import pandas as pd
@@ -17,12 +16,12 @@ import matplotlib.gridspec as gridspec
 from matplotlib import colors as colors_mpl
 
 # Recent CRISPresso2 update causes global style changes that break plotting
-import matplotlib as mpl
+import matplotlib
 # snapshot current rcParams before importing CRISPResso2
-_RC_BEFORE_CRISP = mpl.rcParams.copy()
+_RC_BEFORE_CRISP = matplotlib.rcParams.copy()
 from CRISPResso2 import CRISPRessoShared
 # restore rcParams to the snapshot (undo CRISPResso2 global style changes)
-mpl.rcParams.update(_RC_BEFORE_CRISP)
+matplotlib.rcParams.update(_RC_BEFORE_CRISP)
 
 
 # CATEGORY_COLORS = {
@@ -86,10 +85,12 @@ def main():
         crispresso_run_folder = os.path.join(parent_folder)
         
         os.makedirs(crispresso_output_folder, exist_ok=True)
-        
-        new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
-        
-        crispresso_cmd = new_build_crispresso_command(args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder)
+        if args.compound:
+            comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode, compound=args.compound)
+            crispresso_cmd = new_build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_a, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder)
+        else:
+            new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode, compound=args.compound)
+            crispresso_cmd = new_build_crispresso_command(args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder)
         
         print("Running CRISPResso with command:\n", " ".join(crispresso_cmd), "\n")
         subprocess.run(crispresso_cmd, check=True)
@@ -98,6 +99,8 @@ def main():
         analyze_visualize_sample(twinpe_8cat_results_folder=twinpe_8cat_results_folder, crispresso_output_folder_a=crispresso_output_folder, args=args, wt_seq=args.wt_seq, twin_seq=args.twin_seq, spacer_info=spacer_info, skip_allele_tables=args.no_allele_tables)
         print("Finished TwinPE analysis!")
 
+    # elif args.single_peg:
+
     else:
         crispresso_run_a_folder = os.path.join(parent_folder, "CRISPResso_a")
         crispresso_run_b_folder = os.path.join(parent_folder, "CRISPResso_b")
@@ -105,7 +108,7 @@ def main():
         os.makedirs(crispresso_output_folder_a, exist_ok=True)
         os.makedirs(crispresso_output_folder_b, exist_ok=True)
 
-        comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode)
+        comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b = new_build_compound_reference_alignments(args.wt_seq, args.twin_seq, spacer_a, spacer_b, spacer_info, twinpe_8cat_results_folder, recoding_mode=args.recoding_mode, compound=args.compound)
 
         crispresso_cmd_a = new_build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_a, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_a_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="a")
         crispresso_cmd_b = new_build_crispresso_command(args=args, comp_ref_seq=comp_ref_seq_b, spacer_a=spacer_a, spacer_b=spacer_b, crispresso_output_folder=crispresso_run_b_folder, spacer_info=spacer_info, twinpe_8cat_output_folder=twinpe_8cat_results_folder, run_label="b")
@@ -164,19 +167,21 @@ def parse_args():
     parser.add_argument("-o", "--output_root", type=str, default=None, help="Root output folder for CRISPResso2 and TwinPE 8cat results. If not provided, a folder will be created in the current working directory based on the input fastq file names.")
     parser.add_argument("-ne", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed bases that must be edited for read to be classified.")
     parser.add_argument("-rcm", "--recoding_mode", action="store_true", help="Run in recoding mode when there are only base substitutions.")
+    parser.add_argument("-comp", "--compound", action="store_true", help="Use single Compound reference when in recoding mode.")
     parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=30, help="Default minimum homology score for a read to align to the compound reference amplicon")
     parser.add_argument("-pfr", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
     parser.add_argument("-ied", "--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
     parser.add_argument("-nat", "--no_allele_tables", action="store_true", help="Decrease run time when allele table are not wanted.")
     parser.add_argument("-pp", "--produce_png", action="store_true", help="Produce PNG versions of all plots in addition to PDF versions.")
     parser.add_argument("-mfa", "--min_frequency_alleles", type=float, default=0.0, help="Minimum percent read frequency required to report an allele in the alleles tables.")
-    parser.add_argument("-mnr", "--max_n_rows", type=int, default=50, help="Maximum number of allele rows to display in the allele tables.")
+    parser.add_argument("-mnr", "--max_n_rows", type=int, default=30, help="Maximum number of allele rows to display in the allele tables.")
     parser.add_argument("-nrr", "--no_rerun", action="store_true", help="Don't rerun CRISPResso2 if a run using the same parameters has already been finished.")
     parser.add_argument("-kco", "--keep_crispresso_outputs", action="store_true", help="Don't delete CRISPResso2 output folders after analysis.")
     parser.add_argument("-ts", "--trim_string", type=str, default=None, help="String to trim reads using fastp with override options within CRISPResso2 before analysis.")
     parser.add_argument("-fp", "--fastp_command", type=str, default=None, help="Command to run fastp for read trimming within CRISPResso2 before analysis.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0")
+    # parser.add_argument("-spe", "--single_peg", action="store_true", help="Run in single pegRNA PE mode.")
 
     args = parser.parse_args()
 
@@ -318,11 +323,46 @@ def find_spacers_in_references(wt_seq, twin_seq, spacer_a, spacer_b, recoding_mo
     return results
 
 
-def new_build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, spacer_info, output_root, recoding_mode=False):
+def new_build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b, spacer_info, output_root, recoding_mode=False, compound=False):
     """
     Requires that wt_seq and twin_seq share identical 5' and 3' anchors. Doesn't return output in recoding mode.
     """
-    if recoding_mode:
+    if recoding_mode and compound:
+        spacer_a_nick_site_wt = spacer_info['spacer_a_index_wt'] + len(spacer_a) - spacer_info['spacer_a_num_bases_removed']
+        spacer_b_nick_site_wt = spacer_info['spacer_b_index_wt'] + spacer_info['spacer_b_num_bases_removed']
+        spacer_a_nick_site_twin = spacer_info['spacer_a_index_twin'] + len(spacer_a) - spacer_info['spacer_a_num_bases_removed']
+        spacer_b_nick_site_twin = spacer_info['spacer_b_index_twin']
+
+        prefix = wt_seq[:spacer_a_nick_site_wt]
+        suffix = wt_seq[spacer_b_nick_site_wt:]
+        wt_deleted_seq = wt_seq[spacer_a_nick_site_wt:spacer_b_nick_site_wt]
+        twin_inserted_seq = twin_seq[spacer_a_nick_site_twin:spacer_b_nick_site_twin]
+
+        comp_ref_seq_a = prefix + wt_deleted_seq + twin_inserted_seq + suffix
+        comp_ref_seq_b = prefix + twin_inserted_seq + wt_deleted_seq + suffix
+        wt_aln_seq_a = prefix + wt_deleted_seq + len(twin_inserted_seq) * '-' + suffix
+        wt_aln_seq_b = prefix + len(twin_inserted_seq) * '-' + wt_deleted_seq + suffix
+        twin_aln_seq_a = prefix + len(wt_deleted_seq) * '-' + twin_inserted_seq + suffix
+        twin_aln_seq_b = prefix + twin_inserted_seq + len(wt_deleted_seq) * '-' + suffix
+        
+        # validate lengths
+        if not (len(comp_ref_seq_a) == len(wt_aln_seq_a) == len(twin_aln_seq_a) == len(comp_ref_seq_b) == len(wt_aln_seq_b) == len(twin_aln_seq_b)):
+            raise ValueError("Compound references, WT alignments, and Twin alignments are not the same length")
+        
+        with open(
+            os.path.join(output_root, "c5.aligned_reference_sequences.txt"), "w"
+        ) as fout:
+            fout.write(f"@Alignment\n")
+            fout.write(f">Wildtype_reference_sequence\n{wt_aln_seq_a}\n")
+            fout.write(f">Compound_reference_sequence\n{comp_ref_seq_a}\n")
+            fout.write(f">TwinPE_reference_sequence\n{twin_aln_seq_a}\n\n")
+            fout.write(f"@pegRNA Spacers\n")
+            fout.write(f">SpacerA_sequence\n{spacer_a}\n")
+            fout.write(f">SpacerB_sequence\n{spacer_b}\n")
+
+        return comp_ref_seq_a, wt_aln_seq_a, twin_aln_seq_a, comp_ref_seq_b, wt_aln_seq_b, twin_aln_seq_b
+
+    elif recoding_mode and not compound:
         with open(
             os.path.join(output_root, "c5.aligned_reference_sequences.txt"), "w"
         ) as fout:
@@ -332,6 +372,7 @@ def new_build_compound_reference_alignments(wt_seq, twin_seq, spacer_a, spacer_b
             fout.write(f"@pegRNA Spacers\n")
             fout.write(f">SpacerA_sequence\n{spacer_a}\n")
             fout.write(f">SpacerB_sequence\n{spacer_b}\n")
+
     else:
         spacer_a_nick_site_wt = spacer_info['spacer_a_index_wt'] + len(spacer_a) - spacer_info['spacer_a_num_bases_removed']
         spacer_b_nick_site_wt = spacer_info['spacer_b_index_wt'] + spacer_info['spacer_b_num_bases_removed']
@@ -514,8 +555,8 @@ def new_build_crispresso_command(args=None, comp_ref_seq=None, wt_seq=None, twin
     cmd = [
         "CRISPResso",
         "--fastq_r1", args.fastq_r1,
-        "--amplicon_seq", f"{args.wt_seq},{args.twin_seq}" if args.recoding_mode else comp_ref_seq,
-        "--amplicon_name", f"WT,TwinPE" if args.recoding_mode else "Compound",
+        "--amplicon_seq", f"{args.wt_seq},{args.twin_seq}" if args.recoding_mode and not args.compound else comp_ref_seq,
+        "--amplicon_name", f"WT,TwinPE" if args.recoding_mode and not args.compound else "Compound",
         "--guide_seq", f"{first_spacer},{second_spacer}", 
         "--default_min_aln_score", str(args.default_min_aln_score), 
         "--min_frequency_alleles_around_cut_to_plot", str(args.min_frequency_alleles), 
@@ -680,18 +721,19 @@ def analyze_visualize_sample(
     )
 
     if args.recoding_mode:
-        plot_per_base_pos_barplots(
-            results_final=results_final, 
-            twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
-            del_len=None, 
-            ins_len=None,
-            insert_sequence=None, 
-            deletion_sequence=None,
-            deletion_insertion_sequence=None, 
-            bp_changes_arr=results_final["bp_changes_arr"], # TODO: need to implment recoding_mode sequence support for newer bar plots.
-            recoding_mode=args.recoding_mode, 
-            produce_png=args.produce_png
-        )
+        # plot_per_base_pos_barplots(
+        #     results_final=results_final, 
+        #     twinpe_8cat_results_folder=twinpe_8cat_results_folder, 
+        #     del_len=None, 
+        #     ins_len=None,
+        #     insert_sequence=None, 
+        #     deletion_sequence=None,
+        #     deletion_insertion_sequence=None, 
+        #     bp_changes_arr=results_final["bp_changes_arr"], # TODO: need to implment recoding_mode sequence support for newer bar plots.
+        #     recoding_mode=args.recoding_mode, 
+        #     produce_png=args.produce_png
+        # )
+        pass
 
     else:
         plot_per_base_pos_barplots(
@@ -1008,6 +1050,7 @@ def get_read_match_array(bp_changes_arr, read_map, del_start, del_end, ins_start
             else:
                 match_arr[ind] = "N" # ambiguous base with insertion after
         elif read_base in {"A", "C", "G", "T"}:
+            match_arr[ind] = "S" # non-programmed substitution
             full_sub_arr[ind] = "S" # non-programmed substitution
         else:
             match_arr[ind] = "N" # ambiguous base
@@ -2253,7 +2296,27 @@ def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict,
     read_stats = pd.read_csv(crispresso_mapping_statistics_file, sep="\t")
     unaligned_count = read_stats['READS AFTER PREPROCESSING'][0] - read_stats['READS ALIGNED'][0]
 
-    sorted_counts_labels = sorted(zip(aligned_labels, aligned_counts), key=lambda x: x[1], reverse=True)
+    # fixed ordering
+    custom_order = [
+        "WT",
+        "WT Indel",
+        "Imperfect WT",
+        "Right Flap",
+        "Left Flap",
+        "Imperfect TPE",
+        "TPE Indel",
+        "Perfect TPE"
+    ]
+    count_dict = dict(zip(aligned_labels, aligned_counts))
+    plot_order = custom_order[::-1]
+    sorted_counts_labels = [
+        (label, count_dict.get(label, 0))
+        for label in plot_order
+    ]
+
+    # ordering by counts
+    # sorted_counts_labels = sorted(zip(aligned_labels, aligned_counts), key=lambda x: x[1], reverse=True)
+
     total = sum(aligned_counts)
     legend_labels = [f"{lab} ({val/total*100:.1f}%)" for lab, val in sorted_counts_labels]
 
@@ -2320,10 +2383,32 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_png=False,
     labels = list(counts_dict.keys())
     counts = list(counts_dict.values())
 
-    
-    sorted_pairs = sorted(zip(labels, counts), key=lambda x: x[1], reverse=True)
+    # Fixed ordering
+    custom_order = [
+        "WT",
+        "WT Indel",
+        "Imperfect WT",
+        "Right Flap",
+        "Left Flap",
+        "Imperfect TPE",
+        "TPE Indel",
+        "Perfect TPE"
+    ]
+    count_dict = dict(zip(labels, counts))
+
+    sorted_pairs = [
+        (label, count_dict[label])
+        for label in reversed(custom_order)
+        if label in count_dict
+    ]
+
     sorted_labels = [p[0] for p in sorted_pairs]
     sorted_values = [p[1] for p in sorted_pairs]
+
+    # Ordering by counts    
+    # sorted_pairs = sorted(zip(labels, counts), key=lambda x: x[1], reverse=True)
+    # sorted_labels = [p[0] for p in sorted_pairs]
+    # sorted_values = [p[1] for p in sorted_pairs]
 
     total = sum(sorted_values)
 
@@ -2450,16 +2535,25 @@ def plot_total_read_counts(
     fig_width = max(6, n * width_per_base)
     fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
-    ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap Integration From Left", alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap Integration From Right", alpha=0.75)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
+    total_reads = max(total_counts)
+
+    total_counts_pct = np.array(total_counts) / total_reads * 100
+    edit_counts_pct = np.array(edit_counts) / total_reads * 100
+    from_right_all_edit_counts_pct = np.array(from_right_all_edit_counts) / total_reads * 100
+    from_left_all_edit_counts_pct = np.array(from_left_all_edit_counts) / total_reads * 100
+    perfect_edit_counts_pct = np.array(perfect_edit_counts) / total_reads * 100
+
+    ax.bar(indices, total_counts_pct, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+    ax.bar(indices, edit_counts_pct, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap From Left", alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap From Right", alpha=0.75)
+    ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
 
     # ax.set_title("All Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=16)
+    # ax.set_ylabel("Read Counts", fontsize=16)
+    ax.set_ylabel("% of aligned reads", fontsize=22)
 
-    max_height = max(total_counts)
+    max_height = 100
 
     gap_inches = 0.08
     rect_height_inches = 0.25
@@ -2520,29 +2614,32 @@ def plot_total_read_counts(
             clip_on=False
         )
     else:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
+        # ax.add_patch(patches.Rectangle(
+        #     (0 - bar_width/2, y_region),
+        #     n - 1 + bar_width,
+        #     region_height,
+        #     facecolor="lightgrey",
+        #     edgecolor="none",
+        #     clip_on=False
+        # ))
         ax.text(
             (n - 1)/2,
-            y_region - label_gap_data,
-            "Programmed Sequence (inserted)",
+            y_region,
+            # "Programmed Sequence (inserted)",
+            "Programmed Sequence",
             ha="center",
             va="top",
-            fontsize=16,
+            fontsize=22,
             color="black",
             clip_on=False
         )
 
     spine_gap = bar_width / 2 + 0.15
     ax.set_xlim(-spine_gap, n - 1 + spine_gap)
+
     # ax.set_ylim(y_region, max_height * 1.05)
-    ax.set_ylim(0, max_height * 1.05)
+    # ax.set_ylim(0, max_height * 1.05)
+    ax.set_ylim(0, 105)
 
     ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -2553,21 +2650,21 @@ def plot_total_read_counts(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=22, length=6, width=1)
 
     ax.legend(
         loc="upper center",
         bbox_to_anchor=(0.5, -0.14),
         ncol=5 if n > 33 else 3,
         frameon=False,
-        fontsize=16
+        fontsize=22
     )
 
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     # plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.png", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts(
@@ -2852,7 +2949,7 @@ def plot_total_read_counts_del_region(
 
     # plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight')
     # if produce_png:
-    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight', dpi=300)
+    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.png", bbox_inches='tight', dpi=300)
 
 
 def plot_edit_read_counts_del_region(

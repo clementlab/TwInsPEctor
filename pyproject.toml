@@ -26,6 +26,7 @@ Homepage = "https://github.com/clementlab/TwInsPEctor"
 
 [project.scripts]
 TwInsPEctor = "TwInsPEctor.TwInsPEctor:main"
+TwInsPEctorBatch = "TwInsPEctor.TwInsPEctorBatch:main"
 
 [tool.setuptools]
 packages = ["TwInsPEctor"]
