@@ -22,6 +22,8 @@ Reads are categorized into one of the following eight allele types complete with
 
 ## Installation
 
+*Typical installation time on a normal desktop computer is less than 5 minutes.*
+
 ### Using Conda
 
 ```bash
@@ -89,6 +91,16 @@ python -m TwInsPEctor
 
 - Python >=3.8
 - [CRISPResso2](https://github.com/pinellolab/CRISPResso2) (installed via Bioconda)
+
+### System Requirements
+- **Operating Systems**: Linux, macOS
+- **Tested on**: Rocky Linux 8.10
+- **Hardware Requirements**: This software can run on a standard desktop computer and does not require any non-standard hardware.
+
+## Demo
+
+For instructions on running TwInsPEctor on the provided demo data, including expected outputs, please see [demo/demo.md](demo/demo.md).
+*Expected run time for the demo on a normal desktop computer is < 1 minute.*
 
 ## License
 
