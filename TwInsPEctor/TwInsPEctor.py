@@ -993,8 +993,6 @@ def categorize_alleles(
         df_merged.at[idx,'comp_a_del_match_arr'] = comp_a_del_match_arr
         df_merged.at[idx,'comp_b_del_match_arr'] = comp_b_del_match_arr
 
-    
-
     # Resolve category conflicts
     df_merged["Category_final"] = ""
     df_merged["Classified_by"] = ""
@@ -1019,14 +1017,6 @@ def categorize_alleles(
 
             df_merged.at[allele.Index, "Category_final"] = category
             df_merged.at[allele.Index, "Classified_by"] = source
-
-    # print("Allele distribution:")
-    # print(df_merged["Category_final"].value_counts())
-
-    # print("df_merged columns:")
-    # print(df_merged.columns)
-
-    # df_merged.to_csv("/uufs/chpc.utah.edu/common/home/u0493285/clement/projects/20240216_rowley_hdr/analysis/01_20240718_jules_twinedit/03_nate_practicum/14_4ref_alignments/df_merged.csv", index=False)
 
     return df_merged, bp_changes_arrs
 
