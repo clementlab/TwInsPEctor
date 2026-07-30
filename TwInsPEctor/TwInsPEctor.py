@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.gridspec as gridspec
 from matplotlib import colors as colors_mpl
+import matplotlib.ticker
 # snapshot current rcParams before importing CRISPResso2
 _RC_BEFORE_CRISP = matplotlib.rcParams.copy()
 from CRISPResso2 import CRISPRessoShared
@@ -993,6 +994,8 @@ def categorize_alleles(
         df_merged.at[idx,'comp_a_del_match_arr'] = comp_a_del_match_arr
         df_merged.at[idx,'comp_b_del_match_arr'] = comp_b_del_match_arr
 
+    
+
     # Resolve category conflicts
     df_merged["Category_final"] = ""
     df_merged["Classified_by"] = ""
@@ -1017,6 +1020,14 @@ def categorize_alleles(
 
             df_merged.at[allele.Index, "Category_final"] = category
             df_merged.at[allele.Index, "Classified_by"] = source
+
+    # print("Allele distribution:")
+    # print(df_merged["Category_final"].value_counts())
+
+    # print("df_merged columns:")
+    # print(df_merged.columns)
+
+    # df_merged.to_csv("/uufs/chpc.utah.edu/common/home/u0493285/clement/projects/20240216_rowley_hdr/analysis/01_20240718_jules_twinedit/03_nate_practicum/14_4ref_alignments/df_merged.csv", index=False)
 
     return df_merged, bp_changes_arrs
 
@@ -1481,13 +1492,14 @@ def plot_summary_barplots(category_counts, crispresso_output_folder, twinspector
 
 
 #### Per-base barplots ####
-def plot_flap_incorporation_all(
+def plot_flap_incorporation(
     total_counts,
     edit_counts,
     from_right_all_edit_counts,
     from_left_all_edit_counts,
     perfect_edit_counts, 
     insert_sequence,
+    show_total_reads=True, 
     recoding_mode=False, 
     fig_root=None,
     produce_pdf=False, 
@@ -1495,10 +1507,31 @@ def plot_flap_incorporation_all(
 ):
     n = len(insert_sequence)
     indices = np.arange(n)
-    bar_width = 0.85
-    width_per_base = 0.4
-    fig_width = max(6, n * width_per_base)
-    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
+
+    physical_bar_width = 0.25 
+    physical_gap_width = 0.02 
+
+    width_per_base = physical_bar_width + physical_gap_width
+    bar_width = physical_bar_width / width_per_base
+
+    spine_gap = bar_width / 2 + 0.15
+    data_range = (n - 1 + spine_gap) - (-spine_gap)
+    axes_width = data_range * width_per_base
+
+    min_fig_width = 16
+    fig_height = 7
+    y_label_space = 1.0  
+    right_margin = 0.5   
+
+    natural_fig_width = axes_width + y_label_space + right_margin
+    fig_width = max(min_fig_width, natural_fig_width)
+
+    fig = plt.figure(figsize=(fig_width, fig_height), dpi=300)
+
+    extra_padding = fig_width - natural_fig_width
+    axes_left = y_label_space + (extra_padding / 2)
+
+    ax = fig.add_axes([axes_left / fig_width, 0.20, axes_width / fig_width, 0.72])
 
     total_reads = max(total_counts)
 
@@ -1508,103 +1541,20 @@ def plot_flap_incorporation_all(
     from_left_all_edit_counts_pct = np.array(from_left_all_edit_counts) / total_reads * 100
     perfect_edit_counts_pct = np.array(perfect_edit_counts) / total_reads * 100
 
-    ax.bar(indices, total_counts_pct, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+    if show_total_reads:
+        ax.bar(indices, total_counts_pct, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+        plot_max = 100
+    else:
+        plot_max = min(100, max(edit_counts_pct) * 1.05)
+
     ax.bar(indices, edit_counts_pct, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
     ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap A Integration", alpha=1.0)
     ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap B Integration", alpha=0.75)
     ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
 
-    # ax.set_title("All Reads", fontsize=14)
-    # ax.set_ylabel("Read Counts", fontsize=16)
-    ax.set_ylabel("% of analyzed reads", fontsize=22)
-
-    max_height = 100
-
-    gap_inches = 0.08
-    rect_height_inches = 0.25
-    fig_height_in = fig.get_size_inches()[1]
-    ax_pos = ax.get_position()
-    ax_height_in = fig_height_in * ax_pos.height
-
-    gap_data = gap_inches / ax_height_in * max_height
-    rect_height = rect_height_inches / ax_height_in * max_height
-    y_base = -(gap_data + rect_height)
-
-    for i, base in enumerate(insert_sequence):
-        rect = patches.Rectangle(
-            (i - bar_width/2, y_base),
-            bar_width,
-            rect_height,
-            facecolor=BASE_COLORS.get(base, "#ffffff"),
-            edgecolor="none",
-            clip_on=False
-        )
-        ax.add_patch(rect)
-        ax.text(
-            i,
-            y_base + rect_height/2,
-            base,
-            ha="center",
-            va="center",
-            fontsize=12,
-            clip_on=False
-        )
-
-    region_gap_inches = 0.05
-    region_height_inches = 0.12
-    label_gap_inches = 0.04
-
-    region_gap_data = region_gap_inches / ax_height_in * max_height
-    region_height = region_height_inches / ax_height_in * max_height
-    label_gap_data = label_gap_inches / ax_height_in * max_height
-    y_region = y_base - region_gap_data - region_height
-
-    if recoding_mode:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Programmed Base Substitutions",
-            ha="center",
-            va="top",
-            fontsize=22,
-            color="black",
-            clip_on=False
-        )
-    else:
-        # ax.add_patch(patches.Rectangle(
-        #     (0 - bar_width/2, y_region),
-        #     n - 1 + bar_width,
-        #     region_height,
-        #     facecolor="lightgrey",
-        #     edgecolor="none",
-        #     clip_on=False
-        # ))
-        ax.text(
-            (n - 1)/2,
-            y_region,
-            # "Programmed Sequence (inserted)",
-            "Programmed Sequence",
-            ha="center",
-            va="top",
-            fontsize=22,
-            color="black",
-            clip_on=False
-        )
-
-    spine_gap = bar_width / 2 + 0.15
+    ax.set_ylabel("% of analyzed reads", fontsize=16)
     ax.set_xlim(-spine_gap, n - 1 + spine_gap)
-
-    # ax.set_ylim(y_region, max_height * 1.05)
-    # ax.set_ylim(0, max_height * 1.05)
-    ax.set_ylim(0, 105)
+    ax.set_ylim(0, plot_max)
 
     ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -1615,53 +1565,9 @@ def plot_flap_incorporation_all(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=22, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=16, length=6, width=1)
 
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.14),
-        ncol=5 if n > 33 else 3,
-        frameon=False,
-        fontsize=22
-    )
-
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
-
-    plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.png", bbox_inches='tight', dpi=300)
-    if produce_pdf:
-        plt.savefig(fig_root + "/a4.3'_flap_integration_all_reads.pdf", bbox_inches='tight')
-
-
-def plot_flap_incorporation_edited(
-    edit_counts,
-    from_right_all_edit_counts,
-    from_left_all_edit_counts,
-    perfect_edit_counts, 
-    insert_sequence, 
-    recoding_mode=False, 
-    fig_root=None,
-    produce_pdf=False, 
-    category_colors=None
-):
-    n = len(insert_sequence)
-    indices = np.arange(n)
-    bar_width = 0.85
-    width_per_base = 0.4
-    fig_width = max(6, n * width_per_base)
-    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
-
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts, width=bar_width, label="Continuous 3'-Flap A Integration", color=category_colors["Left Flap"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts, width=bar_width, label="Continuous 3'-Flap B Integration", color=category_colors["Right Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
-
-    # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("% of analyzed reads", fontsize=22)
-
-    ax.set_xticks(indices)
-
-    max_height = max(edit_counts)
-
+    max_height = plot_max
     gap_inches = 0.08
     rect_height_inches = 0.25
     fig_height_in = fig.get_size_inches()[1]
@@ -1672,9 +1578,13 @@ def plot_flap_incorporation_edited(
     rect_height = rect_height_inches / ax_height_in * max_height
     y_base = -(gap_data + rect_height)
 
+    rect_y_offset = 0.0085 * max_height
+    text_y_offset = 0.0055 * max_height
+    region_text_offset = 0.014 * max_height
+
     for i, base in enumerate(insert_sequence):
         rect = patches.Rectangle(
-            (i - bar_width/2, y_base),
+            (i - bar_width/2, y_base + rect_y_offset),
             bar_width,
             rect_height,
             facecolor=BASE_COLORS.get(base, "#ffffff"),
@@ -1684,7 +1594,7 @@ def plot_flap_incorporation_edited(
         ax.add_patch(rect)
         ax.text(
             i,
-            y_base + rect_height/2,
+            y_base + rect_height/2 + text_y_offset,
             base,
             ha="center",
             va="center",
@@ -1694,202 +1604,106 @@ def plot_flap_incorporation_edited(
 
     region_gap_inches = 0.05
     region_height_inches = 0.12
-    label_gap_inches = 0.04
 
     region_gap_data = region_gap_inches / ax_height_in * max_height
     region_height = region_height_inches / ax_height_in * max_height
-    label_gap_data = label_gap_inches / ax_height_in * max_height
     y_region = y_base - region_gap_data - region_height
 
-    if recoding_mode:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Programmed Base Substitutions",
-            ha="center",
-            va="top",
-            fontsize=22,
-            color="black",
-            clip_on=False
-        )
-    else:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Programmed Sequence",
-            ha="center",
-            va="top",
-            fontsize=22,
-            color="black",
-            clip_on=False
-        )
-
-    spine_gap = bar_width / 2 + 0.15
-    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
-    # ax.set_ylim(y_region, max_height * 1.05)
-    ax.set_ylim(0, max_height * 1.05)
-
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-
-    ax.set_xticks([])
-    ax.tick_params(axis='x', length=0)
-
-    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
-    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=22, length=6, width=1)
-
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.14),
-        ncol=5 if n > 33 else 3,
-        frameon=False,
-        fontsize=22
+    label_text = "Edited Bases" if recoding_mode else "Edited Sequence"
+    ax.text(
+        (n - 1)/2,
+        y_region + region_text_offset,
+        label_text,
+        ha="center",
+        va="top",
+        fontsize=16,
+        color="black",
+        clip_on=False
     )
 
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    legend_fontsize = 16
+    points_per_inch = 72
+    perfect_handle_length = (physical_bar_width * points_per_inch) / legend_fontsize
 
-    plt.savefig(fig_root + "/a5.3'_flap_integration_edited_reads.png", bbox_inches='tight', dpi=300)
+    fig.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.1),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=legend_fontsize,
+        handlelength=perfect_handle_length,
+    )
+
+    file_name = "a4.3'_flap_integration_all_reads" if show_total_reads else "a5.3'_flap_integration_edited_reads"
+    
+    plt.savefig(f"{fig_root}/{file_name}.png", dpi=300)
     if produce_pdf:
-        plt.savefig(fig_root + "/a5.3'_flap_integration_edited_reads.pdf", bbox_inches='tight')
+        plt.savefig(f"{fig_root}/{file_name}.pdf")
 
 
-def plot_flap_removal_all(
+def plot_flap_removal(
     total_counts,
     edit_counts,
     from_right_all_edit_counts_del_region,
     from_left_all_edit_counts_del_region,
     perfect_edit_counts_del_region, 
     deleted_sequence,
+    show_total_reads=True, 
     recoding_mode=False, 
     fig_root=None,
     produce_pdf=False, 
     category_colors=None
 ):
-    # total_counts = [total_counts[0]] * len(deleted_sequence)
-    # perfect_edit_counts = [perfect_edit_counts[0]] * len(deleted_sequence)
-    # unedited_counts = np.array(total_counts) - np.array(edit_counts)
-    
     n = len(deleted_sequence)
     indices = np.arange(n)
-    bar_width = 0.85
-    width_per_base = 0.4
-    fig_width = max(6, n * width_per_base)
-    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
 
-    ax.bar(indices, total_counts, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts_del_region, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
+    physical_bar_width = 0.25 
+    physical_gap_width = 0.02 
 
-    # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=28)
-
-    ax.set_xticks(indices)
-
-    max_height = max(total_counts)
-
-    gap_inches = 0.08
-    rect_height_inches = 0.25
-    fig_height_in = fig.get_size_inches()[1]
-    ax_pos = ax.get_position()
-    ax_height_in = fig_height_in * ax_pos.height
-
-    gap_data = gap_inches / ax_height_in * max_height
-    rect_height = rect_height_inches / ax_height_in * max_height
-    y_base = -(gap_data + rect_height)
-
-    for i, base in enumerate(deleted_sequence):
-        rect = patches.Rectangle(
-            (i - bar_width/2, y_base),
-            bar_width,
-            rect_height,
-            facecolor=BASE_COLORS.get(base, "#ffffff"),
-            edgecolor="none",
-            clip_on=False
-        )
-        ax.add_patch(rect)
-        ax.text(
-            i,
-            y_base + rect_height/2,
-            base,
-            ha="center",
-            va="center",
-            fontsize=12,
-            clip_on=False
-        )
-
-    region_gap_inches = 0.05
-    region_height_inches = 0.12
-    label_gap_inches = 0.04
-
-    region_gap_data = region_gap_inches / ax_height_in * max_height
-    region_height = region_height_inches / ax_height_in * max_height
-    label_gap_data = label_gap_inches / ax_height_in * max_height
-    y_region = y_base - region_gap_data - region_height
-
-    if recoding_mode:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Endogenous Sequence (recoded)",
-            ha="center",
-            va="top",
-            fontsize=28,
-            color="black",
-            clip_on=False
-        )
-    else:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Endogenous Sequence (deleted)",
-            ha="center",
-            va="top",
-            fontsize=28,
-            color="black",
-            clip_on=False
-        )
+    width_per_base = physical_bar_width + physical_gap_width
+    bar_width = physical_bar_width / width_per_base
 
     spine_gap = bar_width / 2 + 0.15
+    data_range = (n - 1 + spine_gap) - (-spine_gap)
+    axes_width = data_range * width_per_base
+
+    min_fig_width = 16
+    fig_height = 7
+    y_label_space = 1.0  
+    right_margin = 0.5   
+
+    natural_fig_width = axes_width + y_label_space + right_margin
+    fig_width = max(min_fig_width, natural_fig_width)
+
+    fig = plt.figure(figsize=(fig_width, fig_height), dpi=300)
+
+    extra_padding = fig_width - natural_fig_width
+    axes_left = y_label_space + (extra_padding / 2)
+
+    ax = fig.add_axes([axes_left / fig_width, 0.20, axes_width / fig_width, 0.72])
+
+    total_reads = max(total_counts)
+
+    total_counts_pct = np.array(total_counts) / total_reads * 100
+    edit_counts_pct = np.array(edit_counts) / total_reads * 100
+    from_right_all_edit_counts_pct = np.array(from_right_all_edit_counts_del_region) / total_reads * 100
+    from_left_all_edit_counts_pct = np.array(from_left_all_edit_counts_del_region) / total_reads * 100
+    perfect_edit_counts_pct = np.array(perfect_edit_counts_del_region) / total_reads * 100
+
+    if show_total_reads:
+        ax.bar(indices, total_counts_pct, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+        plot_max = 100
+    else:
+        plot_max = max(edit_counts_pct) * 1.05
+        
+    ax.bar(indices, edit_counts_pct, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Left Flap"], label="Continuous 5'-Flap A Removal", alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Right Flap"], label="Continuous 5'-Flap B Removal", alpha=0.75)
+    ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
+
+    ax.set_ylabel("% of analyzed reads", fontsize=16)
     ax.set_xlim(-spine_gap, n - 1 + spine_gap)
-    # ax.set_ylim(y_region, max_height * 1.05)
-    ax.set_ylim(0, max_height * 1.05)
+    ax.set_ylim(0, plot_max)
 
     ax.spines['bottom'].set_visible(False)
     ax.spines['top'].set_visible(False)
@@ -1900,57 +1714,9 @@ def plot_flap_removal_all(
 
     ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
     ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=28, length=6, width=1)
+    ax.tick_params(axis='y', which='major', labelsize=16, length=6, width=1)
 
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.14),
-        ncol=5 if n > 33 else 3,
-        frameon=False,
-        fontsize=28
-    )
-
-    # plt.tight_layout(rect=[0, 0.05, 1, 1])
-
-    plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.png", bbox_inches='tight', dpi=300)
-    if produce_pdf:
-        plt.savefig(fig_root + "/a6.5'_flap_removal_all_reads.pdf", bbox_inches='tight')
-
-
-def plot_flap_removal_edited(
-    edit_counts,
-    from_right_all_edit_counts_del_region,
-    from_left_all_edit_counts_del_region,
-    perfect_edit_counts_del_region, 
-    deleted_sequence,
-    recoding_mode=False, 
-    fig_root=None,
-    produce_pdf=False, 
-    category_colors=None
-):
-    # perfect_edit_counts = [perfect_edit_counts[0]] * len(deleted_sequence)
-    # unedited_counts = np.array(total_counts) - np.array(edit_counts)
-    
-    n = len(deleted_sequence)
-    indices = np.arange(n)
-    bar_width = 0.85
-    width_per_base = 0.4
-    fig_width = max(6, n * width_per_base)
-    fig, ax = plt.subplots(figsize=(fig_width, 7), dpi=300)
-
-    ax.bar(indices, edit_counts, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)  # If useful needs to be tracked is new array with del length
-    # ax.bar(indices, unedited_counts, width=bar_width, label="Total WTs", color=category_colors["WT"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Left", color=category_colors["Left Flap"], alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_del_region, width=bar_width, label="Continuous 5'-Flap Removal From Right", color=category_colors["Right Flap"], alpha=0.75)
-    ax.bar(indices, perfect_edit_counts_del_region, width=bar_width, label="Perfect TPE Alleles", color=category_colors["Perfect TPE"], alpha=1.0)
-
-    # ax.set_title("Edited Reads", fontsize=14)
-    ax.set_ylabel("Read Counts", fontsize=18)
-
-    ax.set_xticks(indices)
-
-    max_height = max(edit_counts)
-
+    max_height = plot_max
     gap_inches = 0.08
     rect_height_inches = 0.25
     fig_height_in = fig.get_size_inches()[1]
@@ -1961,9 +1727,13 @@ def plot_flap_removal_edited(
     rect_height = rect_height_inches / ax_height_in * max_height
     y_base = -(gap_data + rect_height)
 
+    rect_y_offset = 0.0085 * max_height
+    text_y_offset = 0.0055 * max_height
+    region_text_offset = 0.014 * max_height
+
     for i, base in enumerate(deleted_sequence):
         rect = patches.Rectangle(
-            (i - bar_width/2, y_base),
+            (i - bar_width/2, y_base + rect_y_offset),
             bar_width,
             rect_height,
             facecolor=BASE_COLORS.get(base, "#ffffff"),
@@ -1973,7 +1743,7 @@ def plot_flap_removal_edited(
         ax.add_patch(rect)
         ax.text(
             i,
-            y_base + rect_height/2,
+            y_base + rect_height/2 + text_y_offset,
             base,
             ha="center",
             va="center",
@@ -1983,131 +1753,97 @@ def plot_flap_removal_edited(
 
     region_gap_inches = 0.05
     region_height_inches = 0.12
-    label_gap_inches = 0.04
 
     region_gap_data = region_gap_inches / ax_height_in * max_height
     region_height = region_height_inches / ax_height_in * max_height
-    label_gap_data = label_gap_inches / ax_height_in * max_height
     y_region = y_base - region_gap_data - region_height
 
-    if recoding_mode:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Endogenous Sequence (recoded)",
-            ha="center",
-            va="top",
-            fontsize=18,
-            color="black",
-            clip_on=False
-        )
-    else:
-        ax.add_patch(patches.Rectangle(
-            (0 - bar_width/2, y_region),
-            n - 1 + bar_width,
-            region_height,
-            facecolor="lightgrey",
-            edgecolor="none",
-            clip_on=False
-        ))
-        ax.text(
-            (n - 1)/2,
-            y_region - label_gap_data,
-            "Endogenous Sequence (deleted)",
-            ha="center",
-            va="top",
-            fontsize=18,
-            color="black",
-            clip_on=False
-        )
-
-    spine_gap = bar_width / 2 + 0.15
-    ax.set_xlim(-spine_gap, n - 1 + spine_gap)
-    # ax.set_ylim(y_region, max_height * 1.05)
-    ax.set_ylim(0, max_height * 1.05)
-
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-
-    ax.set_xticks([])
-    ax.tick_params(axis='x', length=0)
-
-    ax.yaxis.set_minor_locator(matplotlib.ticker.AutoMinorLocator())
-    ax.tick_params(axis='y', which='minor', length=3, width=0.8)
-    ax.tick_params(axis='y', which='major', labelsize=18, length=6, width=1)
-
-    ax.legend(
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.14),
-        ncol=5 if n > 33 else 3,
-        frameon=False,
-        fontsize=18
+    label_text = "Wild-type Bases" if recoding_mode else "Wild-type Sequence"
+    ax.text(
+        (n - 1)/2,
+        y_region + region_text_offset,
+        label_text,
+        ha="center",
+        va="top",
+        fontsize=16,
+        color="black",
+        clip_on=False
     )
 
-    plt.tight_layout(rect=[0, 0.05, 1, 1])
+    legend_fontsize = 16
+    points_per_inch = 72
+    perfect_handle_length = (physical_bar_width * points_per_inch) / legend_fontsize
 
-    plt.savefig(fig_root + "/a7.5'_flap_removal_edited_reads.png", bbox_inches='tight', dpi=300)
+    fig.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.1),
+        ncol=5 if n > 33 else 3,
+        frameon=False,
+        fontsize=legend_fontsize,
+        handlelength=perfect_handle_length,
+    )
+
+    file_name = "a6.5'_flap_removal_all_reads" if show_total_reads else "a7.5'_flap_removal_edited_reads"
+    
+    plt.savefig(f"{fig_root}/{file_name}.png", dpi=300)
     if produce_pdf:
-        plt.savefig(fig_root + "/a7.5'_flap_removal_edited_reads.pdf", bbox_inches='tight')
+        plt.savefig(f"{fig_root}/{file_name}.pdf")
 
 
 def plot_per_base_pos_barplots(plotting_info, twinspector_results_folder=None, produce_pdf=False, recoding_mode=False):
 
     setBarMatplotlibDefaults()
 
-    plot_flap_incorporation_all(
+    plot_flap_incorporation(
         total_counts=plotting_info["total_reads_arr"],  
         edit_counts=plotting_info["edit_counts_arr"], 
         from_right_all_edit_counts=plotting_info["from_right_all_edit_counts_arr"], 
         from_left_all_edit_counts=plotting_info["from_left_all_edit_counts_arr"], 
         perfect_edit_counts=plotting_info["perfect_edit_counts_arr"], 
-        insert_sequence=plotting_info["inserted_seq"],
+        insert_sequence=plotting_info["inserted_seq"], 
+        show_total_reads=True,
         recoding_mode=recoding_mode, 
         fig_root=twinspector_results_folder,
         produce_pdf=produce_pdf, 
         category_colors=CATEGORY_COLORS 
     )
 
-    plot_flap_incorporation_edited(
+    plot_flap_incorporation(
+        total_counts=plotting_info["total_reads_arr"], 
         edit_counts=plotting_info["edit_counts_arr"],
         from_right_all_edit_counts=plotting_info["from_right_all_edit_counts_arr"],
         from_left_all_edit_counts=plotting_info["from_left_all_edit_counts_arr"],
         perfect_edit_counts=plotting_info["perfect_edit_counts_arr"],
-        insert_sequence=plotting_info["inserted_seq"],
+        insert_sequence=plotting_info["inserted_seq"], 
+        show_total_reads=False, 
         recoding_mode=recoding_mode, 
         fig_root=twinspector_results_folder,
         produce_pdf=produce_pdf, 
         category_colors=CATEGORY_COLORS
     )
 
-    plot_flap_removal_all(
+    plot_flap_removal(
         total_counts=plotting_info["total_reads_del_region_arr"], 
         edit_counts=plotting_info["edit_counts_del_region_arr"],
         from_right_all_edit_counts_del_region=plotting_info["from_right_all_edit_counts_del_region_arr"],
         from_left_all_edit_counts_del_region=plotting_info["from_left_all_edit_counts_del_region_arr"],
         perfect_edit_counts_del_region=plotting_info["perfect_edit_counts_del_region_arr"],
-        deleted_sequence=plotting_info["deleted_seq"],
+        deleted_sequence=plotting_info["deleted_seq"], 
+        show_total_reads=True, 
         recoding_mode=recoding_mode, 
         fig_root=twinspector_results_folder,
         produce_pdf=produce_pdf, 
         category_colors=CATEGORY_COLORS
     )
     
-    plot_flap_removal_edited(
+    plot_flap_removal(
+        total_counts=plotting_info["total_reads_del_region_arr"], 
         edit_counts=plotting_info["edit_counts_del_region_arr"],
         from_right_all_edit_counts_del_region=plotting_info["from_right_all_edit_counts_del_region_arr"],
         from_left_all_edit_counts_del_region=plotting_info["from_left_all_edit_counts_del_region_arr"],
         perfect_edit_counts_del_region=plotting_info["perfect_edit_counts_del_region_arr"],
-        deleted_sequence=plotting_info["deleted_seq"],
+        deleted_sequence=plotting_info["deleted_seq"], 
+        show_total_reads=False, 
         recoding_mode=recoding_mode, 
         fig_root=twinspector_results_folder,
         produce_pdf=produce_pdf, 
