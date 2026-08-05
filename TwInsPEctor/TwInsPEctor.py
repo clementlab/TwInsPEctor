@@ -263,6 +263,22 @@ def analyze_references(wt_seq, tpe_seq, spacer_a, spacer_b, cleavage_offset_a, c
         tpe_seq_replacement_bp_changes = prefix_seq + len(wt_deleted_seq) * '-' + suffix_seq
         wt_seq_replacement_bp_changes = prefix_seq + len(tpe_inserted_seq) * '-' + suffix_seq
 
+    # Find shared starting and ending bases in inserted_seq and deleted_seq for replacement mode
+    num_bases_shared_start = 0
+    num_bases_shared_end = 0
+    if not recoding_mode:
+        for i in range(min(len(tpe_inserted_seq), len(wt_deleted_seq))):
+            if tpe_inserted_seq[i] == wt_deleted_seq[i]:
+                num_bases_shared_start += 1
+            else:
+                break
+
+        for i in range(1, min(len(tpe_inserted_seq), len(wt_deleted_seq)) + 1):
+            if tpe_inserted_seq[-i] == wt_deleted_seq[-i]:
+                num_bases_shared_end += 1
+            else:
+                break
+
     with open(
         os.path.join(output_root, "c4.reference_sequences.txt"), "w"
     ) as fout:
@@ -337,7 +353,9 @@ def analyze_references(wt_seq, tpe_seq, spacer_a, spacer_b, cleavage_offset_a, c
         "ins_region_len": len(tpe_inserted_seq),
         "del_region_len": len(wt_deleted_seq), 
         "tpe_seq_replacement_bp_changes": tpe_seq_replacement_bp_changes, 
-        "wt_seq_replacement_bp_changes": wt_seq_replacement_bp_changes
+        "wt_seq_replacement_bp_changes": wt_seq_replacement_bp_changes, 
+        "num_bases_shared_start": num_bases_shared_start,
+        "num_bases_shared_end": num_bases_shared_end
     }
 
     return reference_info
@@ -617,46 +635,69 @@ def get_recoding_base_changes(wt_seq=None, twin_seq=None, composite_wt=None, com
     return std_bp_changes_arr, comp_bp_changes_arr
 
 
-def get_allele_match_array(bp_changes_arr, allele_map, del_start, del_end, ins_start, ins_end):
+def get_allele_match_array(bp_changes_arr, allele_map, del_start, del_end, ins_start, ins_end, num_bases_shared_start, num_bases_shared_end):
     match_arr = ["0"] * len(bp_changes_arr)
     # full_ins_arr = ["0"] * len(bp_changes_arr)
     # full_del_arr = ["0"] * len(bp_changes_arr)
     # full_sub_arr = ["0"] * len(bp_changes_arr)
     for ind, (comp_ind, wt_base, tpe_base) in enumerate(bp_changes_arr):
         allele_base = allele_map.get(comp_ind, "")
+
         if allele_base == wt_base:
-            match_arr[ind] = "W" # matches WT base
+            match_arr[ind] = "W"  # matches WT base
         elif allele_base == tpe_base:
-            match_arr[ind] = "T" # matches TwinPE base
+            match_arr[ind] = "T"  # matches TwinPE base
         elif len(allele_base) > 1:
             # full_ins_arr[ind] = "I" # non-programmed insertion
             if allele_base[0] == wt_base:
-                match_arr[ind] = "WI" # matches WT base with insertion after
+                match_arr[ind] = "WI"  # WT base with insertion after
             elif allele_base[0] == tpe_base:
-                match_arr[ind] = "TI" # matches TwinPE base with insertion after
+                match_arr[ind] = "TI"  # TwinPE base with insertion after
             elif allele_base[0] in {"A", "C", "G", "T"}:
-                match_arr[ind] = "SI" # non-programmed substitution with insertion after
+                match_arr[ind] = "SI"  # non-programmed substitution with insertion after
                 # full_sub_arr[ind] = "S" # non-programmed substitution with insertion after
             else:
-                match_arr[ind] = "NI" # ambiguous base with insertion after
+                match_arr[ind] = "NI"  # ambiguous base with insertion after
         elif allele_base in {"A", "C", "G", "T"}:
-            match_arr[ind] = "S" # non-programmed substitution
+            match_arr[ind] = "S"  # non-programmed substitution
             # full_sub_arr[ind] = "S" # non-programmed substitution
         elif allele_base == "-":
+            match_arr[ind] = "D"  # "-" # deletion
             # full_del_arr[ind] = "D" # deletion relative to wt/tpe references aligned to composite references (replacement - not possible) or relative to composite wt/tpe references (recoding - possible)
-            match_arr[ind] = "D" # "-"
         else:
-            match_arr[ind] = "N" # ambiguous base
+            match_arr[ind] = "N"  # ambiguous base
 
-    # Split match_arr by del and ins regions for plotting
+    # Split match_arr into insertion and deletion regions while recording the corresponding indices in match_arr.
     del_match_arr = []
     ins_match_arr = []
-    for match, (comp_ind, wt_base, tpe_base) in zip(match_arr, bp_changes_arr):
-        if comp_ind >= del_start and comp_ind <= del_end:
-            del_match_arr.append(match)
-        # elif comp_ind >= ins_start and comp_ind <= ins_end:
+    del_indices = []
+    ins_indices = []
+
+    for ind, (comp_ind, _, _) in enumerate(bp_changes_arr):
+        if del_start <= comp_ind <= del_end:
+            del_match_arr.append(match_arr[ind])
+            del_indices.append(ind)
         else:
-            ins_match_arr.append(match)
+            ins_match_arr.append(match_arr[ind])
+            ins_indices.append(ind)
+
+    # Mark shared bases at the start
+    if num_bases_shared_start > 0:
+        # Prepend "=" to match_arr
+        for idx in ins_indices[:num_bases_shared_start] + del_indices[:num_bases_shared_start]:
+            match_arr[idx] = "=" + match_arr[idx]   
+        # Prepend "=" to the split arrays
+        ins_match_arr[:num_bases_shared_start] = ["=" + val for val in ins_match_arr[:num_bases_shared_start]]
+        del_match_arr[:num_bases_shared_start] = ["=" + val for val in del_match_arr[:num_bases_shared_start]]
+
+    # Mark shared bases at the end
+    if num_bases_shared_end > 0:
+        # Prepend "=" to match_arr
+        for idx in ins_indices[-num_bases_shared_end:] + del_indices[-num_bases_shared_end:]:
+            match_arr[idx] = "=" + match_arr[idx]
+        # Prepend "=" to the split arrays
+        ins_match_arr[-num_bases_shared_end:] = ["=" + val for val in ins_match_arr[-num_bases_shared_end:]]
+        del_match_arr[-num_bases_shared_end:] = ["=" + val for val in del_match_arr[-num_bases_shared_end:]]
 
     return match_arr, ins_match_arr, del_match_arr #  , full_ins_arr, full_sub_arr, full_del_arr
 
@@ -835,9 +876,9 @@ def categorize_alleles(
         wt_map = get_refpos_values(wt_seq_aln_allele, allele_seq_aln_wt)
 
         if recoding_mode:
-            wt_del_match_arr, _, _ = get_allele_match_array(std_bp_changes_arr, wt_map, del_start=0, del_end=0, ins_start=0, ins_end=0)           
+            wt_del_match_arr, _, _ = get_allele_match_array(std_bp_changes_arr, wt_map, del_start=0, del_end=0, ins_start=0, ins_end=0, num_bases_shared_start=reference_info["num_bases_shared_start"], num_bases_shared_end=reference_info["num_bases_shared_end"])           
         else:
-            wt_del_match_arr, _, _ = get_allele_match_array(wt_bp_changes_arr, wt_map, del_start=0, del_end=0, ins_start=0, ins_end=0)           
+            wt_del_match_arr, _, _ = get_allele_match_array(wt_bp_changes_arr, wt_map, del_start=0, del_end=0, ins_start=0, ins_end=0, num_bases_shared_start=reference_info["num_bases_shared_start"], num_bases_shared_end=reference_info["num_bases_shared_end"])           
 
         wt_all_sub_pos, wt_sub_between_cuts, wt_all_del_pos, wt_del_between_cuts, wt_all_ins_pos, wt_has_substitutions, wt_has_deletions, wt_has_insertions = get_mutations(wt_map, wt_seq, reference_info["cut_points_wt"])
 
@@ -866,9 +907,9 @@ def categorize_alleles(
         tpe_map = get_refpos_values(tpe_seq_aln_allele, allele_seq_aln_tpe)
 
         if recoding_mode:
-            tpe_ins_match_arr, _, _ = get_allele_match_array(std_bp_changes_arr, tpe_map, del_start=0, del_end=0, ins_start=0, ins_end=0)           
+            tpe_ins_match_arr, _, _ = get_allele_match_array(std_bp_changes_arr, tpe_map, del_start=0, del_end=0, ins_start=0, ins_end=0, num_bases_shared_start=reference_info["num_bases_shared_start"], num_bases_shared_end=reference_info["num_bases_shared_end"])           
         else:
-            tpe_ins_match_arr, _, _ = get_allele_match_array(tpe_bp_changes_arr, tpe_map, del_start=0, del_end=0, ins_start=0, ins_end=0)
+            tpe_ins_match_arr, _, _ = get_allele_match_array(tpe_bp_changes_arr, tpe_map, del_start=0, del_end=0, ins_start=0, ins_end=0, num_bases_shared_start=reference_info["num_bases_shared_start"], num_bases_shared_end=reference_info["num_bases_shared_end"])
 
         tpe_all_sub_pos, tpe_sub_between_cuts, tpe_all_del_pos, tpe_del_between_cuts, tpe_all_ins_pos, tpe_has_substitutions, tpe_has_deletions, tpe_has_insertions = get_mutations(tpe_map, tpe_seq, reference_info["cut_points_tpe"])
 
@@ -897,25 +938,27 @@ def categorize_alleles(
         comp_a_map = get_refpos_values(comp_a_seq_aln_allele, allele_seq_aln_comp_a)
 
         if recoding_mode:
-            comp_a_match_arr, comp_a_ins_match_arr, comp_a_del_match_arr = get_allele_match_array(comp_bp_changes_arr, comp_a_map, reference_info["composite_a_del_start"], reference_info["composite_a_del_end"], reference_info["composite_a_ins_start"], reference_info["composite_a_ins_end"])
+            comp_a_match_arr, comp_a_ins_match_arr, comp_a_del_match_arr = get_allele_match_array(comp_bp_changes_arr, comp_a_map, reference_info["composite_a_del_start"], reference_info["composite_a_del_end"], reference_info["composite_a_ins_start"], reference_info["composite_a_ins_end"], reference_info["num_bases_shared_start"], reference_info["num_bases_shared_end"])
         else:
-            comp_a_match_arr, comp_a_ins_match_arr, comp_a_del_match_arr = get_allele_match_array(comp_a_bp_changes_arr, comp_a_map, reference_info["composite_a_del_start"], reference_info["composite_a_del_end"], reference_info["composite_a_ins_start"], reference_info["composite_a_ins_end"])
+            comp_a_match_arr, comp_a_ins_match_arr, comp_a_del_match_arr = get_allele_match_array(comp_a_bp_changes_arr, comp_a_map, reference_info["composite_a_del_start"], reference_info["composite_a_del_end"], reference_info["composite_a_ins_start"], reference_info["composite_a_ins_end"], reference_info["num_bases_shared_start"], reference_info["num_bases_shared_end"])
 
         comp_a_all_sub_pos, comp_a_sub_between_cuts, comp_a_all_del_pos, comp_a_del_between_cuts, comp_a_all_ins_pos, comp_a_has_substitutions, comp_a_has_deletions, comp_a_has_insertions = get_mutations(comp_a_map, comp_a_ref_seq, reference_info["cut_points_composite_a"])
 
         comp_a_has_indel = check_indel_positions(comp_a_all_ins_pos, comp_a_all_del_pos, reference_info["composite_a_del_start"], reference_info["composite_a_del_end"], reference_info["composite_a_ins_start"], reference_info["composite_a_ins_end"], ignore_extraspacer_deletions, reference_info["pegRNA_intervals_composite_a"])
 
         comp_a_total_TPE_count = comp_a_match_arr.count("T") + comp_a_match_arr.count("TI")
-        comp_a_has_all_TPE = (comp_a_total_TPE_count == len(comp_a_match_arr))
+        comp_a_total_shared_base_TPE_count = comp_a_match_arr.count("=T") + comp_a_match_arr.count("=TI")
+        comp_a_has_all_TPE = (comp_a_total_TPE_count + comp_a_total_shared_base_TPE_count == len(comp_a_match_arr))
         comp_a_has_any_TPE = (comp_a_total_TPE_count >= num_changes_to_check)
         comp_a_has_any_TPE_in_insertion = (comp_a_ins_match_arr.count("T") + comp_a_ins_match_arr.count("TI") >= num_changes_to_check)
 
         comp_a_total_WT_count = comp_a_match_arr.count("W") + comp_a_match_arr.count("WI")
-        comp_a_has_all_WT = (comp_a_total_WT_count == len(comp_a_match_arr))
+        comp_a_total_shared_base_WT_count = comp_a_match_arr.count("=W") + comp_a_match_arr.count("=WI")
+        comp_a_has_all_WT = (comp_a_total_WT_count + comp_a_total_shared_base_WT_count == len(comp_a_match_arr))
         comp_a_has_any_WT = (comp_a_total_WT_count > 0)
 
-        comp_a_has_left_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[:num_changes_to_check])
-        comp_a_has_right_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-num_changes_to_check:])
+        comp_a_has_left_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+        comp_a_has_right_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
 
         if comp_a_has_all_TPE and comp_a_has_indel:
             df_merged.at[idx,'Category_comp_a'] = "TPE_Indel"
@@ -945,25 +988,27 @@ def categorize_alleles(
         comp_b_map = get_refpos_values(comp_b_seq_aln_allele, allele_seq_aln_comp_b)
 
         if recoding_mode:
-            comp_b_match_arr, comp_b_ins_match_arr, comp_b_del_match_arr = get_allele_match_array(comp_bp_changes_arr, comp_b_map, reference_info["composite_b_del_start"], reference_info["composite_b_del_end"], reference_info["composite_b_ins_start"], reference_info["composite_b_ins_end"])
+            comp_b_match_arr, comp_b_ins_match_arr, comp_b_del_match_arr = get_allele_match_array(comp_bp_changes_arr, comp_b_map, reference_info["composite_b_del_start"], reference_info["composite_b_del_end"], reference_info["composite_b_ins_start"], reference_info["composite_b_ins_end"], reference_info["num_bases_shared_start"], reference_info["num_bases_shared_end"])
         else:
-            comp_b_match_arr, comp_b_ins_match_arr, comp_b_del_match_arr = get_allele_match_array(comp_b_bp_changes_arr, comp_b_map, reference_info["composite_b_del_start"], reference_info["composite_b_del_end"], reference_info["composite_b_ins_start"], reference_info["composite_b_ins_end"])
+            comp_b_match_arr, comp_b_ins_match_arr, comp_b_del_match_arr = get_allele_match_array(comp_b_bp_changes_arr, comp_b_map, reference_info["composite_b_del_start"], reference_info["composite_b_del_end"], reference_info["composite_b_ins_start"], reference_info["composite_b_ins_end"], reference_info["num_bases_shared_start"], reference_info["num_bases_shared_end"])
 
         comp_b_all_sub_pos, comp_b_sub_between_cuts, comp_b_all_del_pos, comp_b_del_between_cuts, comp_b_all_ins_pos, comp_b_has_substitutions, comp_b_has_deletions, comp_b_has_insertions = get_mutations(comp_b_map, comp_b_ref_seq, reference_info["cut_points_composite_b"])
 
         comp_b_has_indel = check_indel_positions(comp_b_all_ins_pos, comp_b_all_del_pos, reference_info["composite_b_del_start"], reference_info["composite_b_del_end"], reference_info["composite_b_ins_start"], reference_info["composite_b_ins_end"], ignore_extraspacer_deletions, reference_info["pegRNA_intervals_composite_b"])
 
         comp_b_total_TPE_count = comp_b_match_arr.count("T") + comp_b_match_arr.count("TI")
-        comp_b_has_all_TPE = (comp_b_total_TPE_count == len(comp_b_match_arr))
+        comp_b_total_shared_base_TPE_count = comp_b_match_arr.count("=T") + comp_b_match_arr.count("=TI")
+        comp_b_has_all_TPE = (comp_b_total_TPE_count + comp_b_total_shared_base_TPE_count == len(comp_b_match_arr))
         comp_b_has_any_TPE = (comp_b_total_TPE_count >= num_changes_to_check)
         comp_b_has_any_TPE_in_insertion = (comp_b_ins_match_arr.count("T") + comp_b_ins_match_arr.count("TI") >= num_changes_to_check)
 
         comp_b_total_WT_count = comp_b_match_arr.count("W") + comp_b_match_arr.count("WI")
-        comp_b_has_all_WT = (comp_b_total_WT_count == len(comp_b_match_arr))
+        comp_b_total_shared_base_WT_count = comp_b_match_arr.count("=W") + comp_b_match_arr.count("=WI")
+        comp_b_has_all_WT = (comp_b_total_WT_count + comp_b_total_shared_base_WT_count == len(comp_b_match_arr))
         comp_b_has_any_WT = (comp_b_total_WT_count > 0)
 
-        comp_b_has_left_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[:num_changes_to_check])
-        comp_b_has_right_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-num_changes_to_check:])
+        comp_b_has_left_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+        comp_b_has_right_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
 
         if comp_b_has_all_TPE and comp_b_has_indel:
             df_merged.at[idx,'Category_comp_b'] = "TPE_Indel"
@@ -1020,14 +1065,6 @@ def categorize_alleles(
 
             df_merged.at[allele.Index, "Category_final"] = category
             df_merged.at[allele.Index, "Classified_by"] = source
-
-    # print("Allele distribution:")
-    # print(df_merged["Category_final"].value_counts())
-
-    # print("df_merged columns:")
-    # print(df_merged.columns)
-
-    # df_merged.to_csv("/uufs/chpc.utah.edu/common/home/u0493285/clement/projects/20240216_rowley_hdr/analysis/01_20240718_jules_twinedit/03_nate_practicum/14_4ref_alignments/df_merged.csv", index=False)
 
     return df_merged, bp_changes_arrs
 
@@ -1104,37 +1141,37 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
 
         if ins_match_arr:
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     edit_counts_arr[pos_idx] += allele['#Reads']
 
             for pos_idx, match in zip(reversed(range(len(ins_match_arr))), reversed(ins_match_arr)):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     from_right_all_edit_counts_arr[pos_idx] += allele['#Reads']
                 else:
                     break
 
             for pos_idx, match in zip(range(len(ins_match_arr)), ins_match_arr):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     from_left_all_edit_counts_arr[pos_idx] += allele['#Reads']
                 else:
                     break
 
-            if all(base in {"T", "TI"} for base in ins_match_arr):
+            if all(base in {"T", "TI", "=T", "=TI"} for base in ins_match_arr):
                 perfect_edit_counts += allele['#Reads']
 
         if del_match_arr:    
             for pos_idx, match in zip(range(len(del_match_arr)), del_match_arr):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     edit_counts_del_region_arr[pos_idx] += allele['#Reads']
 
             for pos_idx, match in zip(range(len(del_match_arr)), del_match_arr):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     from_left_all_edit_counts_del_region_arr[pos_idx] += allele['#Reads']
                 else:
                     break
 
             for pos_idx, match in zip(reversed(range(len(del_match_arr))), reversed(del_match_arr)):
-                if match in {"T", "TI"}:
+                if match in {"T", "TI", "=T", "=TI"}:
                     from_right_all_edit_counts_del_region_arr[pos_idx] += allele['#Reads']
                 else:
                     break
@@ -3032,8 +3069,8 @@ def plot_categorical_ref_allele_tables(
             tpe_aln_seq,
             cut_points, 
             window_by_intervals=not plot_full_reads, 
-            # left_pad=6, 
-            # right_pad=6
+            left_pad=6, 
+            right_pad=6
         )
 
         X, annot, y_labels, insertion_dict, per_element_annot_kws, is_reference = prep_alleles_table(
@@ -3669,7 +3706,7 @@ def parse_args():
     parser.add_argument("-fp", "--fastp_command", type=str, default=None, help="Command to run fastp for read trimming within CRISPResso2 before analysis.")
     parser.add_argument("-coa", "--cleavage_offset_a", type=int, default=-3, help="Cleavage offset for pegRNA spacer A (default: -3).")
     parser.add_argument("-cob", "--cleavage_offset_b", type=int, default=-3, help="Cleavage offset for pegRNA spacer B (default: -3).")
-    parser.add_argument("-nmt", "--no_multithreading", action="store_true", help="Run CRISPResso2 and allele plotting sequentially instead of in parallel (significantly increases runtime).")
+    parser.add_argument("-nmp", "--no_multiprocessing", action="store_true", help="Run CRISPResso2 and allele plotting sequentially instead of in parallel (significantly increases runtime).")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose CRISPResso2 output.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0.0")
@@ -3683,7 +3720,7 @@ def parse_args():
 
 
 def main():
-    print("\nStarting TwInsPEction...")
+    print("\nStarting TwInsPEctor...")
     args = parse_args()
 
     parent_folder, crispresso_wt, crispresso_tpe, crispresso_composite_a, crispresso_composite_b, twinspector_results_folder = get_folder_names(args)
@@ -3702,7 +3739,7 @@ def main():
     crispresso_cmd_composite_a = get_crispresso_command(args=args, ref_seq=reference_info["composite_a_ref_seq"], ref_name="Composite_A", spacer_a=reference_info["spacer_a_composite_a"], spacer_b=reference_info["spacer_b_composite_a"], crispresso_output_folder=crispresso_composite_a, twinspector_results_folder=twinspector_results_folder)
     crispresso_cmd_composite_b = get_crispresso_command(args=args, ref_seq=reference_info["composite_b_ref_seq"], ref_name="Composite_B", spacer_a=reference_info["spacer_a_composite_b"], spacer_b=reference_info["spacer_b_composite_b"], crispresso_output_folder=crispresso_composite_b, twinspector_results_folder=twinspector_results_folder)
 
-    if args.no_multithreading:
+    if args.no_multiprocessing:
         print("Running CRISPResso2...")
         run_crispresso_command(crispresso_cmd_wt, verbose=args.verbose)
         run_crispresso_command(crispresso_cmd_tpe, verbose=args.verbose)
@@ -3728,7 +3765,7 @@ def main():
             plot_per_base_pos_barplots(plotting_info=plotting_info, twinspector_results_folder=twinspector_results_folder, produce_pdf=args.produce_pdf, recoding_mode=args.recoding_mode)
 
         if not args.no_allele_tables:
-            if args.no_multithreading:
+            if args.no_multiprocessing:
                 print("Generating allele tables...")
                 plot_ref_allele_tables_sequential(args=args, df_categorized=df_categorized, reference_info=reference_info, twinspector_results_folder=twinspector_results_folder)
             else:
