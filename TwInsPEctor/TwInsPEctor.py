@@ -31,23 +31,54 @@ CATEGORY_COLORS = {
     "WT": "#b2182b",
     "WT Indel": "#d6604d",
     "Imperfect WT": "#f4a582",
-    "Right Flap": "#d9d9d9",
-    "Left Flap": "#9e9e9e",
+    "Flap B": "#d9d9d9",
+    "Flap A": "#9e9e9e",
     "Imperfect TPE": "#92c5de",
     "TPE Indel": "#4393c3",
     "Perfect TPE": "#2166ac",
     "Uncategorized": "#93de92"
 }
 
+EXTENDED_CATEGORY_COLORS = { 
+    "WT": "#b2182b",            # Dark Red 
+    "WT Indel": "#d6604d",      # Medium Red 
+    "Imperfect WT": "#f4a582",  # Light Red 
+    "Null": "#fddbc7",          # Very Light Red 
+    "Imperfect TPE": "#f0f0d8", # Cream
+    "Flap B Hybrid": "#e0e0e0", # Very Light Grey
+    "Flap A Hybrid": "#b8b8b8", # Light-Medium Grey
+    "Flap B": "#808080",        # Medium-Dark Grey
+    "Flap A": "#4a4a4a",        # Very Dark Grey    
+    "Dual Flap": "#92c5de",     # Light Blue 
+    "TPE Indel": "#4393c3",     # Medium Blue 
+    "Perfect TPE": "#2166ac",   # Dark Blue 
+    "Uncategorized": "#93de92"  # Neutral Green 
+}
+
 CATEGORY_ORDER = [
-    "WT", 
-    "WT Indel",
-    "Imperfect WT",
-    "Right Flap",
-    "Left Flap",
+    "Perfect TPE",
+    "TPE Indel", 
     "Imperfect TPE", 
+    "Flap A", 
+    "Flap B", 
+    "Imperfect WT",
+    "WT Indel",
+    "WT"
+]
+
+EXTENDED_CATEGORY_ORDER = [
+    "Perfect TPE",
     "TPE Indel",
-    "Perfect TPE"
+    "Dual Flap",
+    "Flap A", 
+    "Flap B", 
+    "Flap A Hybrid", 
+    "Flap B Hybrid", 
+    "Imperfect TPE", 
+    "Null", 
+    "Imperfect WT",
+    "WT Indel",
+    "WT"
 ]
 
 ALPHA = 0.4
@@ -759,18 +790,18 @@ def resolve_composite_categories(
         "WT": 3,
         "WT_Indel": 4,
         "Imperfect_TPE": 5,
-        "Left_Flap": 6,
-        "Right_Flap": 6,
+        "Flap_A": 6,
+        "Flap_B": 6,
         "Imperfect_WT": 7,
     }
 
     DEFAULT_PRIORITY = 99
 
-    # Left flap vs Right flap disagreement
+    # Flap A vs Flap B disagreement
     flap_disagreement = (
-        (category_a == "Left_Flap" and category_b == "Right_Flap")
+        (category_a == "Flap_A" and category_b == "Flap_B")
         or
-        (category_a == "Right_Flap" and category_b == "Left_Flap")
+        (category_a == "Flap_B" and category_b == "Flap_A")
     )
 
     if flap_disagreement and abs(score_a - score_b) <= flap_score_delta:
@@ -957,8 +988,8 @@ def categorize_alleles(
         comp_a_has_all_WT = (comp_a_total_WT_count + comp_a_total_shared_base_WT_count == len(comp_a_match_arr))
         comp_a_has_any_WT = (comp_a_total_WT_count > 0)
 
-        comp_a_has_left_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
-        comp_a_has_right_flap = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+        comp_a_has_flap_a = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+        comp_a_has_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
 
         if comp_a_has_all_TPE and comp_a_has_indel:
             df_merged.at[idx,'Category_comp_a'] = "TPE_Indel"
@@ -968,15 +999,15 @@ def categorize_alleles(
             df_merged.at[idx,'Category_comp_a'] = "WT_Indel"
         elif comp_a_has_all_WT:
             df_merged.at[idx,'Category_comp_a'] = "WT"
-        elif comp_a_has_left_flap and not comp_a_has_right_flap:
-            df_merged.at[idx,'Category_comp_a'] = "Left_Flap"
-        elif comp_a_has_right_flap and not comp_a_has_left_flap:
-            df_merged.at[idx,'Category_comp_a'] = "Right_Flap"
+        elif comp_a_has_flap_a and not comp_a_has_flap_b:
+            df_merged.at[idx,'Category_comp_a'] = "Flap_A"
+        elif comp_a_has_flap_b and not comp_a_has_flap_a:
+            df_merged.at[idx,'Category_comp_a'] = "Flap_B"
         elif comp_a_has_any_WT and not comp_a_has_any_TPE_in_insertion:
             df_merged.at[idx,'Category_comp_a'] = "Imperfect_WT"
         elif comp_a_has_any_TPE:
             df_merged.at[idx,'Category_comp_a'] = "Imperfect_TPE"
-        elif not comp_a_has_left_flap and not comp_a_has_right_flap and not comp_a_has_any_TPE:
+        elif not comp_a_has_flap_a and not comp_a_has_flap_b and not comp_a_has_any_TPE:
             df_merged.at[idx,'Category_comp_a'] = "Imperfect_WT"
         else:
             df_merged.at[idx,'Category_comp_a'] = "Uncategorized"
@@ -1007,8 +1038,8 @@ def categorize_alleles(
         comp_b_has_all_WT = (comp_b_total_WT_count + comp_b_total_shared_base_WT_count == len(comp_b_match_arr))
         comp_b_has_any_WT = (comp_b_total_WT_count > 0)
 
-        comp_b_has_left_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
-        comp_b_has_right_flap = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+        comp_b_has_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+        comp_b_has_flap_b = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
 
         if comp_b_has_all_TPE and comp_b_has_indel:
             df_merged.at[idx,'Category_comp_b'] = "TPE_Indel"
@@ -1018,15 +1049,15 @@ def categorize_alleles(
             df_merged.at[idx,'Category_comp_b'] = "WT_Indel"
         elif comp_b_has_all_WT:
             df_merged.at[idx,'Category_comp_b'] = "WT"
-        elif comp_b_has_left_flap and not comp_b_has_right_flap:
-            df_merged.at[idx,'Category_comp_b'] = "Left_Flap"
-        elif comp_b_has_right_flap and not comp_b_has_left_flap:
-            df_merged.at[idx,'Category_comp_b'] = "Right_Flap"
+        elif comp_b_has_flap_a and not comp_b_has_flap_b:
+            df_merged.at[idx,'Category_comp_b'] = "Flap_A"
+        elif comp_b_has_flap_b and not comp_b_has_flap_a:
+            df_merged.at[idx,'Category_comp_b'] = "Flap_B"
         elif comp_b_has_any_WT and not comp_b_has_any_TPE_in_insertion:
             df_merged.at[idx,'Category_comp_b'] = "Imperfect_WT"
         elif comp_b_has_any_TPE:
             df_merged.at[idx,'Category_comp_b'] = "Imperfect_TPE"
-        elif not comp_b_has_left_flap and not comp_b_has_right_flap and not comp_b_has_any_TPE:
+        elif not comp_b_has_flap_a and not comp_b_has_flap_b and not comp_b_has_any_TPE:
             df_merged.at[idx,'Category_comp_b'] = "Imperfect_WT"
         else:
             df_merged.at[idx,'Category_comp_b'] = "Uncategorized"
@@ -1038,8 +1069,6 @@ def categorize_alleles(
         df_merged.at[idx,'wt_del_match_arr'] = wt_del_match_arr
         df_merged.at[idx,'comp_a_del_match_arr'] = comp_a_del_match_arr
         df_merged.at[idx,'comp_b_del_match_arr'] = comp_b_del_match_arr
-
-    
 
     # Resolve category conflicts
     df_merged["Category_final"] = ""
@@ -1069,6 +1098,171 @@ def categorize_alleles(
     return df_merged, bp_changes_arrs
 
 
+def get_extended_categories(df_categorized=None, reference_info=None, num_changes_to_check=2, twinspector_results_folder=None):
+
+    # Split out dual flap outcomes from Imperfect TPEs
+    df_imperfect_tpe = df_categorized[df_categorized["Category_final"] == "Imperfect_TPE"].copy()
+    df_imperfect_tpe["dual_flap"] = None
+
+    for idx, allele in df_imperfect_tpe.iterrows():
+
+        has_tpe_flap_a = None
+        has_tpe_flap_b = None
+
+        if allele.Classified_by == "TPE":
+            tpe_ins_match_arr = allele.tpe_ins_match_arr
+
+            has_tpe_flap_a = all(base in {"T", "TI"} for base in tpe_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+            has_tpe_flap_b = all(base in {"T", "TI"} for base in tpe_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        elif allele.Classified_by == "Composite_A":
+            comp_a_ins_match_arr = allele.comp_a_ins_match_arr
+
+            has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+            has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        elif allele.Classified_by == "Composite_B":
+            comp_b_ins_match_arr = allele.comp_b_ins_match_arr
+
+            has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+            has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        elif allele.Classified_by == "Composite_A&B":
+            comp_a_ins_match_arr = allele.comp_a_ins_match_arr
+            comp_b_ins_match_arr = allele.comp_b_ins_match_arr
+
+            has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+            has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        if has_tpe_flap_a is True and has_tpe_flap_b is True:
+            df_imperfect_tpe.at[idx, "dual_flap"] = True
+        elif has_tpe_flap_a is False and has_tpe_flap_b is False:
+            df_imperfect_tpe.at[idx, "dual_flap"] = False
+
+    dual_flap_count = df_imperfect_tpe[df_imperfect_tpe["dual_flap"] == True]["#Reads"].sum()
+    # df_imperfect_tpe.to_csv(twinspector_results_folder + "/dual_flap.csv", index=False)
+
+    # Split out hybrid flap outcomes from flap A category
+    df_flap_a = df_categorized[df_categorized["Category_final"] == "Flap_A"].copy()
+    df_flap_a["hybrid"] = None
+
+    for idx, allele in df_flap_a.iterrows():
+        has_wt_flap_b = None
+
+        if allele.Classified_by == "TPE":
+            tpe_ins_match_arr = allele.tpe_ins_match_arr
+            has_wt_flap_b = all(base in {"W", "WI"} for base in tpe_ins_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        elif allele.Classified_by == "Composite_A":
+            comp_a_del_match_arr = allele.comp_a_del_match_arr
+            has_wt_flap_b = all(base in {"W", "WI"} for base in comp_a_del_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        elif allele.Classified_by == "Composite_B":
+            comp_b_del_match_arr = allele.comp_b_del_match_arr
+            has_wt_flap_b = all(base in {"W", "WI"} for base in comp_b_del_match_arr[-(reference_info["num_bases_shared_end"] + num_changes_to_check):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+
+        if has_wt_flap_b is True:
+            df_flap_a.at[idx, "hybrid"] = True
+        elif has_wt_flap_b is False:
+            df_flap_a.at[idx, "hybrid"] = False
+
+    flap_a_hybrid_count = df_flap_a[df_flap_a["hybrid"] == True]["#Reads"].sum()
+    # df_flap_a.to_csv(twinspector_results_folder + "/flap_a_hybrid.csv", index=False)
+    
+    # Split out hybrid flap outcomes from flap B category
+    df_flap_b = df_categorized[df_categorized["Category_final"] == "Flap_B"].copy()
+    df_flap_b["hybrid"] = None
+
+    for idx, allele in df_flap_b.iterrows():
+        has_wt_flap_a = None
+
+        if allele.Classified_by == "TPE":
+            tpe_ins_match_arr = allele.tpe_ins_match_arr
+            has_wt_flap_a = all(base in {"W", "WI"} for base in tpe_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+
+        elif allele.Classified_by == "Composite_A":
+            comp_a_del_match_arr = allele.comp_a_del_match_arr
+            has_wt_flap_a = all(base in {"W", "WI"} for base in comp_a_del_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+
+        elif allele.Classified_by == "Composite_B":
+            comp_b_del_match_arr = allele.comp_b_del_match_arr
+            has_wt_flap_a = all(base in {"W", "WI"} for base in comp_b_del_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + num_changes_to_check])
+
+        if has_wt_flap_a is True:
+            df_flap_b.at[idx, "hybrid"] = True
+        elif has_wt_flap_a is False:
+            df_flap_b.at[idx, "hybrid"] = False
+
+    flap_b_hybrid_count = df_flap_b[df_flap_b["hybrid"] == True]["#Reads"].sum()
+    # df_flap_b.to_csv(twinspector_results_folder + "/flap_b_hybrid.csv", index=False)
+
+    # Split out alleles lacking any sequence (WT or TPE) between nick sites from Imperfect WTs
+    df_imperfect_wt = df_categorized[df_categorized["Category_final"] == "Imperfect_WT"].copy()
+    df_imperfect_wt["null"] = None
+
+    for idx, allele in df_imperfect_wt.iterrows():
+        has_null = None
+
+        if allele.Classified_by == "WT":
+            wt_del_match_arr = allele.wt_del_match_arr
+            has_null = all(base not in {"W", "WI", "T", "TI"} for base in wt_del_match_arr)
+
+        elif allele.Classified_by == "Composite_A":
+            comp_a_del_match_arr = allele.comp_a_del_match_arr
+            comp_a_ins_match_arr = allele.comp_a_ins_match_arr
+            has_null = all(base in {"T", "TI", "=T", "=TI"} for base in comp_a_del_match_arr) and all(base in {"W", "WI", "=W", "=WI"} for base in comp_a_ins_match_arr)
+
+        elif allele.Classified_by == "Composite_B":
+            comp_b_del_match_arr = allele.comp_b_del_match_arr
+            comp_b_ins_match_arr = allele.comp_b_ins_match_arr
+            has_null = all(base in {"T", "TI", "=T", "=TI"} for base in comp_b_del_match_arr) and all(base in {"W", "WI", "=W", "=WI"} for base in comp_b_ins_match_arr)
+
+        if has_null is True:
+            df_imperfect_wt.at[idx, "null"] = True
+        elif has_null is False:
+            df_imperfect_wt.at[idx, "null"] = False
+
+    null_count = df_imperfect_wt[df_imperfect_wt["null"] == True]["#Reads"].sum()
+    # df_imperfect_wt.to_csv(twinspector_results_folder + "/null.csv", index=False)
+
+    # write extended category counts file
+    with open(twinspector_results_folder + "/c1.category_counts.txt", "r") as fin:
+        contents = fin.readlines()
+
+    header = contents[0].rstrip("\n").split("\t")
+    counts = contents[1].rstrip("\n").split("\t")
+
+    category_counts = dict(zip(header, map(int, counts)))
+
+    # Split extended categories from their parent categories
+    category_counts["Imperfect TPE"] -= dual_flap_count
+    category_counts["Flap A"] -= flap_a_hybrid_count
+    category_counts["Flap B"] -= flap_b_hybrid_count
+    category_counts["Imperfect WT"] -= null_count
+
+    extended_category_counts = {
+        "Perfect TPE": category_counts["Perfect TPE"], 
+        "TPE Indel": category_counts["TPE Indel"], 
+        "Dual Flap": dual_flap_count, 
+        "Flap A": category_counts["Flap A"], 
+        "Flap B": category_counts["Flap B"], 
+        "Flap A Hybrid": flap_a_hybrid_count, 
+        "Flap B Hybrid": flap_b_hybrid_count,  
+        "Imperfect TPE": category_counts["Imperfect TPE"], 
+        "Null": null_count, 
+        "Imperfect WT": category_counts["Imperfect WT"], 
+        "WT Indel": category_counts["WT Indel"], 
+        "WT": category_counts["WT"], 
+        "Uncategorized": category_counts["Uncategorized"]
+    }
+
+    with open(twinspector_results_folder + "/c1.extended_category_counts.txt", "w") as fout:
+        fout.write("\t".join(EXTENDED_CATEGORY_ORDER) + "\tUncategorized" + "\n")
+        fout.write("\t".join(str(extended_category_counts[category]) for category in EXTENDED_CATEGORY_ORDER + ["Uncategorized"]) + "\n")
+
+    return extended_category_counts
+
+
 #### Plotting Functions ####
 def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinspector_results_folder=None, recoding_mode=False):
 
@@ -1087,8 +1281,8 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
     wt_count = 0
     wt_indel_count = 0
     imperfect_wt_count = 0
-    right_flap_count = 0
-    left_flap_count = 0
+    flap_b_count = 0
+    flap_a_count = 0
     imperfect_tpe_count = 0
     tpe_indels_count = 0
     perfect_tpe_count = 0
@@ -1098,7 +1292,7 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
     edit_counts_arr = [0] * ins_region_len
     from_right_all_edit_counts_arr = [0] * ins_region_len
     from_left_all_edit_counts_arr = [0] * ins_region_len
-    perfect_edit_counts = 0
+    # perfect_edit_counts = 0
     edit_counts_del_region_arr = [0] * del_region_len
     from_right_all_edit_counts_del_region_arr = [0] * del_region_len
     from_left_all_edit_counts_del_region_arr = [0] * del_region_len
@@ -1112,10 +1306,10 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
             wt_indel_count += allele["#Reads"]
         elif allele.Category_final == "Imperfect_WT":
             imperfect_wt_count += allele["#Reads"]
-        elif allele.Category_final == "Right_Flap":
-            right_flap_count += allele["#Reads"]
-        elif allele.Category_final == "Left_Flap":
-            left_flap_count += allele["#Reads"]
+        elif allele.Category_final == "Flap_B":
+            flap_b_count += allele["#Reads"]
+        elif allele.Category_final == "Flap_A":
+            flap_a_count += allele["#Reads"]
         elif allele.Category_final == "Imperfect_TPE":
             imperfect_tpe_count += allele["#Reads"]
         elif allele.Category_final == "TPE_Indel":
@@ -1156,8 +1350,12 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
                 else:
                     break
 
-            if all(base in {"T", "TI", "=T", "=TI"} for base in ins_match_arr):
-                perfect_edit_counts += allele['#Reads']
+        # if ins_match_arr and del_match_arr:
+        #     if all(base in {"T", "TI", "=T", "=TI"} for base in ins_match_arr) and all(base in {"T", "TI", "=T", "=TI"} for base in del_match_arr): # and not has_indel:
+        #         perfect_edit_counts += allele['#Reads']
+        # elif ins_match_arr and not del_match_arr:
+        #     if all(base in {"T", "TI", "=T", "=TI"} for base in ins_match_arr): # and not has_indel:
+        #         perfect_edit_counts += allele['#Reads']
 
         if del_match_arr:    
             for pos_idx, match in zip(range(len(del_match_arr)), del_match_arr):
@@ -1178,10 +1376,13 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
 
         total_reads += allele["#Reads"]
 
+    perfect_edit_counts = df[df['Category_final'] == 'Perfect_TPE']['#Reads'].sum()
     total_reads_arr = [total_reads] * ins_region_len
     perfect_edit_counts_arr = [perfect_edit_counts] * ins_region_len
+    # perfect_edit_counts_arr = [perfect_edit_counts] * ins_region_len
     total_reads_del_region_arr = [total_reads] * del_region_len
     perfect_edit_counts_del_region_arr = [perfect_edit_counts] * del_region_len
+    # perfect_edit_counts_del_region_arr = [perfect_edit_counts] * del_region_len
     edit_counts_del_region_arr = [x + perfect_edit_counts for x in edit_counts_del_region_arr]
     from_left_all_edit_counts_del_region_arr = [x + perfect_edit_counts for x in from_left_all_edit_counts_del_region_arr]
     from_right_all_edit_counts_del_region_arr = [x + perfect_edit_counts for x in from_right_all_edit_counts_del_region_arr]
@@ -1191,8 +1392,8 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
         "Perfect TPE": perfect_tpe_count,
         "TPE Indel": tpe_indels_count,
         "Imperfect TPE": imperfect_tpe_count,
-        "Left Flap": left_flap_count,
-        "Right Flap": right_flap_count,
+        "Flap A": flap_a_count,
+        "Flap B": flap_b_count,
         "Imperfect WT": imperfect_wt_count,
         "WT Indel": wt_indel_count,
         "WT": wt_count,
@@ -1218,11 +1419,11 @@ def get_plotting_stats(df=None, reference_info=None, bp_changes_arrs=None,twinsp
 
     # Write to files
     with open(twinspector_results_folder + "/c1.category_counts.txt", "w") as fout:
-        fout.write("\t".join(["Perfect TPE", "TPE Indel", "Imperfect TPE", "Left Flap", "Right Flap", "Imperfect WT", "WT Indel", "WT", "Uncategorized"]) + "\n")
-        fout.write("\t".join([str(category_counts[cat]) for cat in ["Perfect TPE", "TPE Indel", "Imperfect TPE", "Left Flap", "Right Flap", "Imperfect WT", "WT Indel", "WT", "Uncategorized"]]) + "\n")
+        fout.write("\t".join(CATEGORY_ORDER + ["Uncategorized"]) + "\n")
+        fout.write("\t".join([str(category_counts[cat]) for cat in CATEGORY_ORDER + ["Uncategorized"]]) + "\n")
 
     with open(twinspector_results_folder + "/c2.top_alleles_by_category.txt", "w") as fout:
-        for c in CATEGORY_ORDER + ["Uncategorized"]:
+        for c in CATEGORY_ORDER[::-1] + ["Uncategorized"]:
             fc = c.replace(" ", "_")
             if fc not in df['Category_final'].values:
                 continue
@@ -1317,7 +1518,7 @@ def plot_reads_input_summary_barplot(crispresso_output_folder, counts_dict, fig_
                 color='black'
             )
         
-    ax.set_ylabel("Read Counts", fontsize=10)
+    ax.set_ylabel("Reads", fontsize=10)
 
     ax.set_xticks(range(len(sorted_labels)))
     ax.set_xticklabels(percent_labels, rotation=0, ha="center")
@@ -1337,7 +1538,7 @@ def plot_reads_input_summary_barplot(crispresso_output_folder, counts_dict, fig_
         plt.savefig(fig_root + "/a1.Reads_input_summary.pdf", bbox_inches='tight')
 
 
-def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root=None, produce_pdf=False, category_colors=None):
+def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict, fig_root=None, produce_pdf=False, category_colors=None, extended_categories=False):
 
     aligned_labels = list(counts_dict.keys())
     aligned_counts = list(counts_dict.values())
@@ -1345,19 +1546,11 @@ def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict,
     read_stats = pd.read_csv(crispresso_mapping_statistics_file, sep="\t")
     unaligned_count = read_stats['READS AFTER PREPROCESSING'][0] - sum(counts_dict.values())  # read_stats['READS ALIGNED'][0]
 
-    # fixed ordering
-    custom_order = [
-        "WT",
-        "WT Indel",
-        "Imperfect WT",
-        "Right Flap",
-        "Left Flap",
-        "Imperfect TPE",
-        "TPE Indel",
-        "Perfect TPE"
-    ]
     count_dict = dict(zip(aligned_labels, aligned_counts))
-    plot_order = custom_order[::-1]
+    if extended_categories:
+        plot_order = EXTENDED_CATEGORY_ORDER
+    else:
+        plot_order = CATEGORY_ORDER
     sorted_counts_labels = [
         (label, count_dict.get(label, 0))
         for label in plot_order
@@ -1405,7 +1598,7 @@ def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict,
 
     axes[0].set_xticks([0], labels=["Analyzed"], fontsize=8)
     # axes[0].set_xlabel("Analyzed", fontsize=8)
-    axes[0].set_ylabel("Read Counts", fontsize=8)
+    axes[0].set_ylabel("Reads", fontsize=8)
     axes[0].spines['top'].set_visible(False)
     axes[0].spines['right'].set_visible(False)
     axes[0].minorticks_on()
@@ -1423,31 +1616,25 @@ def plot_category_stacked_summary_barplot(crispresso_output_folder, counts_dict,
     axes[1].tick_params(axis="y", which="major", length=5, width=1, left=False)
 
     # plt.tight_layout()
-    plt.savefig(fig_root + "/a2.Category_summary_stacked.png", bbox_inches='tight', dpi=300)
-    if produce_pdf:
-        plt.savefig(fig_root + "/a2.Category_summary_stacked.pdf", bbox_inches='tight')
+    if extended_categories:
+        plt.savefig(fig_root + "/a2.Extended_category_summary_stacked.png", bbox_inches='tight', dpi=300)
+        if produce_pdf:
+            plt.savefig(fig_root + "/a2.Extended_category_summary_stacked.pdf", bbox_inches='tight')
+    else:
+        plt.savefig(fig_root + "/a2.Category_summary_stacked.png", bbox_inches='tight', dpi=300)
+        if produce_pdf:
+            plt.savefig(fig_root + "/a2.Category_summary_stacked.pdf", bbox_inches='tight')
 
 
 def plot_category_summary_barplot(counts_dict, fig_root=None, produce_pdf=False, category_colors=None):
     labels = list(counts_dict.keys())
     counts = list(counts_dict.values())
 
-    # Fixed ordering
-    custom_order = [
-        "WT",
-        "WT Indel",
-        "Imperfect WT",
-        "Right Flap",
-        "Left Flap",
-        "Imperfect TPE",
-        "TPE Indel",
-        "Perfect TPE"
-    ]
     count_dict = dict(zip(labels, counts))
 
     sorted_pairs = [
         (label, count_dict[label])
-        for label in reversed(custom_order)
+        for label in reversed(CATEGORY_ORDER)
         if label in count_dict
     ]
 
@@ -1480,7 +1667,7 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_pdf=False,
                 fontsize=8,
             )
 
-    ax.set_ylabel("Read Counts", fontsize=8)
+    ax.set_ylabel("Reads", fontsize=8)
     ax.tick_params(axis="y", labelsize=8)
 
     ax.set_xticks(range(len(sorted_labels)))
@@ -1501,7 +1688,7 @@ def plot_category_summary_barplot(counts_dict, fig_root=None, produce_pdf=False,
         plt.savefig(fig_root + "/a3.Category_summary.pdf", bbox_inches='tight')
 
 
-def plot_summary_barplots(category_counts, crispresso_output_folder, twinspector_results_folder, produce_pdf):
+def plot_summary_barplots(category_counts, crispresso_output_folder, twinspector_results_folder, produce_pdf, extended_categories=False):
 
     setBarMatplotlibDefaults()
     
@@ -1517,7 +1704,8 @@ def plot_summary_barplots(category_counts, crispresso_output_folder, twinspector
         category_counts, 
         fig_root=twinspector_results_folder, 
         produce_pdf=produce_pdf, 
-        category_colors=CATEGORY_COLORS
+        category_colors=CATEGORY_COLORS, 
+        extended_categories=extended_categories
     )
 
     plot_category_summary_barplot(
@@ -1579,17 +1767,17 @@ def plot_flap_incorporation(
     perfect_edit_counts_pct = np.array(perfect_edit_counts) / total_reads * 100
 
     if show_total_reads:
-        ax.bar(indices, total_counts_pct, width=bar_width, label="Total Reads", color=category_colors["WT"], alpha=1.0)
+        ax.bar(indices, total_counts_pct, width=bar_width, label="Unedited", color=category_colors["WT"], alpha=1.0)
         plot_max = 100
     else:
         plot_max = min(100, max(edit_counts_pct) * 1.05)
 
-    ax.bar(indices, edit_counts_pct, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Left Flap"], label="Continuous 3'-Flap A Integration", alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Right Flap"], label="Continuous 3'-Flap B Integration", alpha=0.75)
-    ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
+    ax.bar(indices, edit_counts_pct, width=bar_width, label="Edited", color=category_colors["Imperfect TPE"], alpha=1.0)
+    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Flap A"], label="Continuous 3' Flap A", alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Flap B"], label="Continuous 3' Flap B", alpha=0.75)
+    ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE", color=category_colors["Perfect TPE"], alpha=1.0)
 
-    ax.set_ylabel("% of analyzed reads", fontsize=16)
+    ax.set_ylabel("Reads (%)", fontsize=16)
     ax.set_xlim(-spine_gap, n - 1 + spine_gap)
     ax.set_ylim(0, plot_max)
 
@@ -1734,11 +1922,11 @@ def plot_flap_removal(
         plot_max = max(edit_counts_pct) * 1.05
         
     ax.bar(indices, edit_counts_pct, width=bar_width, label="Total TPEs", color=category_colors["Imperfect TPE"], alpha=1.0)
-    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Left Flap"], label="Continuous 5'-Flap A Removal", alpha=1.0)
-    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Right Flap"], label="Continuous 5'-Flap B Removal", alpha=0.75)
+    ax.bar(indices, from_left_all_edit_counts_pct, width=bar_width, color=category_colors["Flap A"], label="Continuous 5' Flap A Removal", alpha=1.0)
+    ax.bar(indices, from_right_all_edit_counts_pct, width=bar_width, color=category_colors["Flap B"], label="Continuous 5' Flap B Removal", alpha=0.75)
     ax.bar(indices, perfect_edit_counts_pct, width=bar_width, label="Perfect TPE Reads", color=category_colors["Perfect TPE"], alpha=1.0)
 
-    ax.set_ylabel("% of analyzed reads", fontsize=16)
+    ax.set_ylabel("Reads (%)", fontsize=16)
     ax.set_xlim(-spine_gap, n - 1 + spine_gap)
     ax.set_ylim(0, plot_max)
 
@@ -2982,7 +3170,7 @@ def plot_alleles_heatmap(
     if plot_cut_point:
         proxies.append(
               matplotlib.lines.Line2D([0], [1], linestyle='--', c='black', ms=6))
-        descriptions.append('Predicted cleavage position')
+        descriptions.append('Nick site')
 
     if category:
         category = category.replace("_", r"\ ")
@@ -3039,8 +3227,8 @@ def plot_categorical_ref_allele_tables(
         ("Perfect_TPE", "b1.Perfect_TPE.aligned_to_composite_a", "b1.Perfect_TPE.aligned_to_composite_b", "b1.Perfect_TPE.aligned_to_tpe", "b1.Perfect_TPE.aligned_to_wt"), 
         ("TPE_Indel", "b2.TPE_Indel.aligned_to_composite_a", "b2.TPE_Indel.aligned_to_composite_b", "b2.TPE_Indel.aligned_to_tpe", "b2.TPE_Indel.aligned_to_wt"), 
         ("Imperfect_TPE", "b3.Imperfect_TPE.aligned_to_composite_a", "b3.Imperfect_TPE.aligned_to_composite_b", "b3.Imperfect_TPE.aligned_to_tpe", "b3.Imperfect_TPE.aligned_to_wt"),
-        ("Left_Flap", "b4.Left_Flap.aligned_to_composite_a", "b4.Left_Flap.aligned_to_composite_b", "b4.Left_Flap.aligned_to_tpe", "b4.Left_Flap.aligned_to_wt"),
-        ("Right_Flap", "b5.Right_Flap.aligned_to_composite_a", "b5.Right_Flap.aligned_to_composite_b", "b5.Right_Flap.aligned_to_tpe", "b5.Right_Flap.aligned_to_wt"),
+        ("Flap_A", "b4.Flap_A.aligned_to_composite_a", "b4.Flap_A.aligned_to_composite_b", "b4.Flap_A.aligned_to_tpe", "b4.Flap_A.aligned_to_wt"),
+        ("Flap_B", "b5.Flap_B.aligned_to_composite_a", "b5.Flap_B.aligned_to_composite_b", "b5.Flap_B.aligned_to_tpe", "b5.Flap_B.aligned_to_wt"),
         ("Imperfect_WT", "b6.Imperfect_WT.aligned_to_composite_a", "b6.Imperfect_WT.aligned_to_composite_b", "b6.Imperfect_WT.aligned_to_tpe", "b6.Imperfect_WT.aligned_to_wt"),
         ("WT_Indel", "b7.WT_Indel.aligned_to_composite_a", "b7.WT_Indel.aligned_to_composite_b", "b7.WT_Indel.aligned_to_tpe", "b7.WT_Indel.aligned_to_wt"),
         ("WT", "b8.WT.aligned_to_composite_a", "b8.WT.aligned_to_composite_b", "b8.WT.aligned_to_tpe", "b8.WT.aligned_to_wt"),
@@ -3308,8 +3496,8 @@ def generate_report(twinspector_results_folder, parent_folder, html_filename="Tw
     alignment_titles = {
         "b1.Perfect_TPE": "Perfect TPE Alleles",
         "b2.TPE_Indel": "TPE Alleles with Indels",
-        "b3.Left_Flap": "Left Flap TPE Alleles",
-        "b4.Right_Flap": "Right Flap TPE Alleles",
+        "b3.Flap_A": "Flap A TPE Alleles",
+        "b4.Flap_B": "Flap B TPE Alleles",
         "b5.Imperfect_TPE": "Imperfect TPE Alleles",
         "b6.Imperfect_WT": "Imperfect WT Alleles",
         "b7.WT_Indel": "WT Alleles with Indels",
@@ -3672,8 +3860,8 @@ def parse_args():
             "----Category Definitions----\n"
             "Perfect TPE: complete programmed edit without indels.\n"
             "TPE Indel: complete programmed edit with indels.\n"
-            "Left Flap: at least N consecutive programmed bases starting from the left (pegRNA-a) but not from the right.\n"
-            "Right Flap: at least N consecutive programmed bases starting from the right (pegRNA-b) but not from the left.\n"
+            "Flap A: at least N consecutive programmed bases starting from the left (pegRNA-a) but not from the right.\n"
+            "Flap B: at least N consecutive programmed bases starting from the right (pegRNA-b) but not from the left.\n"
             "Imperfect TPE: incomplete programmed edit (contains TPE sequence but meets neither or both flap criteria).\n"
             "Imperfect WT: incomplete wildtype sequence and none of the programmed edit.\n"
             "WT Indel: complete wildtype sequence with indels and none of the programmed edit.\n"
@@ -3688,8 +3876,8 @@ def parse_args():
     parser.add_argument("-t", "--tpe_seq", type=str, required=True, help="Full Twin prime edited reference amplicon sequence with 5' & 3' ends identical to wildtype reference amplicon.")
     parser.add_argument("-g", "--peg_spacers", type=str, required=True, help="Comma-separated pegRNA spacer sequences: <spacer A>,<spacer B>. Should include bases immediately adjacent to but not including the PAM sequence (usually 20nt 5' of NGG).")
     parser.add_argument("-o", "--output_root", type=str, default=None, help="Root output folder for CRISPResso2 and TwInsPEctor results. If not provided, a folder will be created in the current working directory based on the input fastq file names.")
-    parser.add_argument("-ne", "--num_changes_to_check", type=int, default=2, help="Minimum number of programmed bases that must be edited for read to be classified.")
     parser.add_argument("-rcm", "--recoding_mode", action="store_true", help="Run in recoding mode if the wild-type and twin prime edited sequences are the same length and should be evaluated as having only base substitutions.")
+    parser.add_argument("-ne", "--num_changes_to_check", type=int, default=2, help="Minimum number of base changes required for a read to be considered edited.")
     parser.add_argument("-dmas", "--default_min_aln_score", type=int, default=30, help="Default minimum homology score for a read to align to the compound reference amplicon")
     parser.add_argument("-pfr", "--plot_full_reads", action="store_true", help="Allele tables will display full read sequences.")
     parser.add_argument("-ied", "--ignore_extraspacer_deletions", action="store_true", help="Classification ignores deletions occurring beyond the spacers (outside edit window).")
@@ -3707,6 +3895,7 @@ def parse_args():
     parser.add_argument("-coa", "--cleavage_offset_a", type=int, default=-3, help="Cleavage offset for pegRNA spacer A (default: -3).")
     parser.add_argument("-cob", "--cleavage_offset_b", type=int, default=-3, help="Cleavage offset for pegRNA spacer B (default: -3).")
     parser.add_argument("-nmp", "--no_multiprocessing", action="store_true", help="Run CRISPResso2 and allele plotting sequentially instead of in parallel (significantly increases runtime).")
+    parser.add_argument("-ec", "--extended_categories", action="store_true", help="Includes outputs for additional categories such as dual flap and hybrid outcomes.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print verbose CRISPResso2 output.")
     parser.add_argument("-d", "--debug", action="store_true")
     parser.add_argument("-V", "--version", action="version", version="%(prog)s 1.0.0")
@@ -3755,10 +3944,15 @@ def main():
     df_categorized, bp_changes_arrs = categorize_alleles(df_merged=df_merged, wt_seq=args.wt_seq, tpe_seq=args.tpe_seq, reference_info=reference_info, num_changes_to_check=args.num_changes_to_check, ignore_extraspacer_deletions=args.ignore_extraspacer_deletions, default_min_aln_score=args.default_min_aln_score, recoding_mode=args.recoding_mode)
     plotting_info = get_plotting_stats(df=df_categorized, reference_info=reference_info, bp_changes_arrs=bp_changes_arrs, twinspector_results_folder=twinspector_results_folder, recoding_mode=args.recoding_mode)
 
+    if args.extended_categories:
+        extended_category_counts = get_extended_categories(df_categorized=df_categorized, reference_info=reference_info, num_changes_to_check=args.num_changes_to_check, twinspector_results_folder=twinspector_results_folder)
+
     if not args.no_plots:
         if not args.no_summary_plots:
             print("Generating summary plots...")
             plot_summary_barplots(category_counts=plotting_info["category_counts"], crispresso_output_folder=crispresso_wt, twinspector_results_folder=twinspector_results_folder, produce_pdf=args.produce_pdf)
+            if args.extended_categories:
+                plot_category_stacked_summary_barplot(crispresso_output_folder=crispresso_wt, counts_dict=extended_category_counts, fig_root=twinspector_results_folder, produce_pdf=args.produce_pdf, category_colors=EXTENDED_CATEGORY_COLORS, extended_categories=args.extended_categories)
 
         if not args.no_per_base_plots:
             print("Generating per-base plots...")
