@@ -64,27 +64,27 @@ pip install .
 | `-r2`, `--fastq_r2` | Path to FASTQ R2 file for paired-end data. | `None` |
 | `-o`, `--output_root` | Root output folder for CRISPResso2 and TwInsPEctor results. If not provided, a folder will be created in the current working directory based on the input FASTQ file names. | `auto` |
 | `-rcm`, `--recoding_mode` | Run in recoding mode if the wild-type and twin prime edited sequences are the same length and should be evaluated as having only base substitutions. | `off` |
-| `-ne`, `--min_num_base_edits` | Minimum number of base changes required for a read to be considered edited. | `3` (replacement)<br>`2` (recoding) |
-| `-dmas`, `--default_min_aln_score` | Default minimum homology score for a read to align to the compound reference amplicon. | `30` |
+| `-ne`, `--min_num_base_edits` | Minimum number of twinPE-matched base changes required for a read to be considered edited. | `3` (replacement)<br>`2` (recoding) |
+| `-coa`, `--cleavage_offset_a` | Cleavage offset for pegRNA spacer A. | `-3` |
+| `-cob`, `--cleavage_offset_b` | Cleavage offset for pegRNA spacer B. | `-3` |
+| `-dmas`, `--default_min_aln_score` | Default alignment score against any reference for a read to be included in analysis. | `30` |
 | `-pfr`, `--plot_full_reads` | Display full read sequences in allele tables. | `off` |
 | `-ncda`, `--no_collapse_displayed_alleles` | Do not combine alleles that become identical in the displayed allele table window. | `off` |
-| `-naa`, `--no_alignment_adjustments` | Do not visually adjust homologies in the allele tables. This does not affect allele classification. | `off` |
+| `-naa`, `--no_alignment_adjustments` | Do not adjust for homologies in the allele tables. This does not affect allele classification. | `off` |
 | `-ied`, `--ignore_extraspacer_deletions` | Classification ignores deletions occurring beyond the spacers (outside edit window). | `off` |
 | `-nf`, `--no_figures` | Skip all figures if only text outputs are desired. | `off` |
-| `-nsf`, `--no_summary_figures` | Skip summary barplots if they are not desired. | `off` |
-| `-nbf`, `--no_per_base_figures` | Skip per-base barplots if they are not desired. | `off` |
-| `-nmf`, `--no_mutation_figures` | Skip mutation barplots if they are not desired. | `off` |
+| `-nsf`, `--no_summary_figures` | Skip summary barplots and summarized allele tables. | `off` |
+| `-nbf`, `--no_per_base_figures` | Skip per-base barplots. | `off` |
+| `-nmf`, `--no_mutation_figures` | Skip mutation barplots. | `off` |
 | `-pet`, `--plot_extended_tables` | Generates separate allele tables for each category. Controlled by `--max_n_rows` and `--min_frequency_alleles`. | `off` |
 | `-pdf`, `--save_pdf` | Only save PDF versions of all plots. | `off` |
 | `-npng`, `--no_save_png` | Do not save PNG versions of all plots. | `off` |
 | `-mfa`, `--min_frequency_alleles` | Minimum percent read frequency required to report an allele in the allele tables. | `0.1` |
 | `-mnr`, `--max_n_rows` | Maximum number of allele rows to display in the allele tables by category. | `25` |
 | `-mna`, `--max_n_alleles_to_write` | Maximum number of alleles per category to write to the f7 text file. | `50` |
-| `-nrr`, `--no_rerun` | Don't rerun CRISPResso2 if a run using the same parameters has already been finished. | `off` |
-| `-kco`, `--keep_crispresso_outputs` | Don't delete CRISPResso2 output folders after analysis. | `off` |
+| `-nrr`, `--no_rerun` | Do not rerun CRISPResso2 if a run using the same parameters has already been finished. | `off` |
+| `-kco`, `--keep_crispresso_outputs` | Do not delete CRISPResso2 output folders after analysis. | `off` |
 | `--crispresso_args` | Additional arguments to pass to CRISPResso2 (wrapped in quotes); do not include `--n_processes`. | `""` |
-| `-coa`, `--cleavage_offset_a` | Cleavage offset for pegRNA spacer A. | `-3` |
-| `-cob`, `--cleavage_offset_b` | Cleavage offset for pegRNA spacer B. | `-3` |
 | `-p`, `--n_processes`, `--n_threads` | Total process budget. CRISPResso2 divides it across reference runs; allele-table plotting uses up to `N` processes. | `1` |
 | `-v`, `--verbose` | Print verbose CRISPResso2 output. | `off` |
 
@@ -119,6 +119,7 @@ python -m TwInsPEctor
 ## Demo
 
 For instructions on running TwInsPEctor on the provided demo data, including expected outputs, please see [demo/demo.md](demo/demo.md).
+
 *Expected run time for the demo on a normal desktop computer is < 1 minute.*
 
 ## License
