@@ -2,17 +2,19 @@
 
 TwInsPEctor is a tool for analyzing twin prime editing outcomes from next-generation sequencing reads, including data processing and visualization.
 
-It utilizes CRISPResso2 for alignment of reads to a wiltype-edited compound reference.
+It utilizes CRISPResso2 for alignment of reads to wild type, edited, and wildtype-edited composite references.
 
-Reads are categorized into one of the following eight allele types complete with detailed visualizations:
-- Perfect TPE - complete programmed edit without indels.
-- TPE Indel -  complete programmed edit with indels.
-- Left Flap - at least N consecutive programmed bases starting from the left but not from the right.
-- Right Flap - at least N consecutive programmed bases starting from the right but not from the left.
-- Imperfect TPE - incomplete programmed edit (neither or both flaps).
-- Imperfect WT - incomplete wildtype sequence and none of the programmed edit.
-- WT Indel - complete wildtype sequence with indels and none of the programmed edit.
-- WT - complete wildtype sequence without indels and none of the programmed edit.
+Reads are classified into one of ten allele outcome categories:
+- Perfect TPE - exact programmed edit.
+- Dual Flap - meets both Flap A and Flap B requirements.
+- Flap A - at least N contiguous bases from the start of only the pegRNA-a templated sequence.
+- Flap B - at least N contiguous bases from the start of only the pegRNA-b templated sequence.
+- Flap A Hybrid - meets Flap A requirements but retains wild type sequence from the opposing 5' flap.
+- Flap B Hybrid - meets Flap B requirements but retains wild type sequence from the opposing 5' flap.
+- Imperfect TPE - contains a partially edited sequence meeting none of the flap category requirements.
+- Null - lacks any detectable wild type or edited sequence in between the two pegRNA nick sites.
+- Imperfect WT - partial wildtype sequence with none of the edited sequence.
+- WT - unedited wild type sequence.
 
 ## Features
 
@@ -40,39 +42,56 @@ pip install .
 
 ## Overview of command line interface
 
-### Required arguments
+### Required Arguments
 
 | Argument | Description |
-|--------|-------------|
-| `-r1`, `--fastq_r1` | path to fastq r1 file. |
-| `-w`, `--wt_seq` | full wildtype reference amplicon sequence including spacers. |
-| `-t`, `--twin_seq` | full twin-pe reference amplicon sequence with 5′ and 3′ ends identical to the wildtype amplicon. |
-| `-g`, `--peg_spacers` | comma-separated pegRNA spacer sequences: `<spacerA>,<spacerB>` |
----
+| :--- | :--- |
+| `-r1`, `--fastq_r1` | Path to FASTQ R1 file. |
+| `-w`, `--wt_seq` | Full wild-type reference amplicon sequence including spacers. |
+| `-t`, `--tpe_seq` | Full Twin prime edited reference amplicon sequence with 5' & 3' ends identical to wildtype reference amplicon. |
+| `-g`, `--peg_spacers` | Comma-separated pegRNA spacer sequences: `<spacer A>,<spacer B>`. Should include bases immediately adjacent to but not including the PAM sequence (usually 20nt 5' of NGG). |
+
+### Recommended Arguments
+
+| Argument | Description |
+| :--- | :--- |
+| `-rt`, `--rt_templates` | Comma-separated pegRNA reverse transcriptase templates: `<RT template A>,<RT template B>`. Informs flap analysis and plotting. |
 
 ### Optional Arguments
 
 | Argument | Description | Default |
-|--------|-------------|--------|
-| `-r2`, `--fastq_r2` | path to fastq r2 file for paired-end data. | None |
-| `-o`, `--output_root` | root output directory for TwInsPEctor results. If not provided, a folder is created in the working directory based on input fastq names. | auto |
-| `-ne`, `--num_changes_to_check` | minimum number of programmed bases that must be edited for classification. | `2` |
-| `-rcm`, `--recoding_mode` | enable recoding mode when edits consist only of base substitutions. | off |
-| `-dmas`, `--default_min_aln_score` | minimum homology score for CRISPResso2 to align read to compound reference. | `50` |
-| `-pfr`, `--plot_full_reads` | display full read sequences in allele tables. | off |
-| `-ied`, `--ignore_extraspacer_deletions` | ignore deletions outside the edit window (beyond spacers). | off |
-| `-nat`, `--no_allele_tables` | skip generation of allele tables to reduce runtime. | off |
-| `-mfa`, `--min_frequency_alleles` | minimum percent read frequency required to report an allele. | `0.0` |
-| `-mnr`, `--max_n_rows` | maximum number of allele rows displayed in tables. | `50` |
-| `-nrr`, `--no_rerun` | do not rerun CRISPResso2 if the same parameters were already completed. | off |
-| `-kco`, `--keep_crispresso_outputs` | preserve CRISPResso2 output folders after analysis. | off |
-| `-ts`, `--trim_string` | string to trim reads using fastp with override options within CRISPResso2 before analysis. | None |
-| `-fp`, `--fastp_command` | command to run fastp for read trimming within CRISPResso2 before analysis. | None |
+| :--- | :--- | :--- |
+| `-r2`, `--fastq_r2` | Path to FASTQ R2 file for paired-end data. | `None` |
+| `-o`, `--output_root` | Root output folder for CRISPResso2 and TwInsPEctor results. If not provided, a folder will be created in the current working directory based on the input FASTQ file names. | `auto` |
+| `-rcm`, `--recoding_mode` | Run in recoding mode if the wild-type and twin prime edited sequences are the same length and should be evaluated as having only base substitutions. | `off` |
+| `-ne`, `--min_num_base_edits` | Minimum number of base changes required for a read to be considered edited. | `3` (replacement)<br>`2` (recoding) |
+| `-dmas`, `--default_min_aln_score` | Default minimum homology score for a read to align to the compound reference amplicon. | `30` |
+| `-pfr`, `--plot_full_reads` | Display full read sequences in allele tables. | `off` |
+| `-ncda`, `--no_collapse_displayed_alleles` | Do not combine alleles that become identical in the displayed allele table window. | `off` |
+| `-naa`, `--no_alignment_adjustments` | Do not visually adjust homologies in the allele tables. This does not affect allele classification. | `off` |
+| `-ied`, `--ignore_extraspacer_deletions` | Classification ignores deletions occurring beyond the spacers (outside edit window). | `off` |
+| `-nf`, `--no_figures` | Skip all figures if only text outputs are desired. | `off` |
+| `-nsf`, `--no_summary_figures` | Skip summary barplots if they are not desired. | `off` |
+| `-nbf`, `--no_per_base_figures` | Skip per-base barplots if they are not desired. | `off` |
+| `-nmf`, `--no_mutation_figures` | Skip mutation barplots if they are not desired. | `off` |
+| `-pet`, `--plot_extended_tables` | Generates separate allele tables for each category. Controlled by `--max_n_rows` and `--min_frequency_alleles`. | `off` |
+| `-pdf`, `--save_pdf` | Only save PDF versions of all plots. | `off` |
+| `-npng`, `--no_save_png` | Do not save PNG versions of all plots. | `off` |
+| `-mfa`, `--min_frequency_alleles` | Minimum percent read frequency required to report an allele in the allele tables. | `0.1` |
+| `-mnr`, `--max_n_rows` | Maximum number of allele rows to display in the allele tables by category. | `25` |
+| `-mna`, `--max_n_alleles_to_write` | Maximum number of alleles per category to write to the f7 text file. | `50` |
+| `-nrr`, `--no_rerun` | Don't rerun CRISPResso2 if a run using the same parameters has already been finished. | `off` |
+| `-kco`, `--keep_crispresso_outputs` | Don't delete CRISPResso2 output folders after analysis. | `off` |
+| `--crispresso_args` | Additional arguments to pass to CRISPResso2 (wrapped in quotes); do not include `--n_processes`. | `""` |
+| `-coa`, `--cleavage_offset_a` | Cleavage offset for pegRNA spacer A. | `-3` |
+| `-cob`, `--cleavage_offset_b` | Cleavage offset for pegRNA spacer B. | `-3` |
+| `-p`, `--n_processes`, `--n_threads` | Total process budget. CRISPResso2 divides it across reference runs; allele-table plotting uses up to `N` processes. | `1` |
+| `-v`, `--verbose` | Print verbose CRISPResso2 output. | `off` |
 
 ### Usage
 
 ```
-TwInsPEctor -r1 <FASTQ_R1> [-r2 <FASTQ_R2>] -w <WT_SEQUENCE> -t <TWINPE_SEQUENCE> -g <PEG_SPACER_A>,<PEG_SPACER_B> [options]
+TwInsPEctor -r1 <FASTQ_R1> [-r2 <FASTQ_R2>] -w <WT_SEQUENCE> -t <TWINPE_SEQUENCE> -g <PEG_SPACER_A>,<PEG_SPACER_B> -rt RT_TEMPLATE_A>,<RT_TEMPLATE_B> [options]
 ```
 
 After installation, use the CLI for help:
