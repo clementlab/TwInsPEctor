@@ -119,6 +119,7 @@ python -m TwInsPEctor
 ## Demo
 
 For instructions on running TwInsPEctor on the provided demo data, including expected outputs, please see [demo/demo.md](demo/demo.md).
+*Expected run time for the demo on a normal desktop computer is < 1 minute.*
 
 ## License
 
