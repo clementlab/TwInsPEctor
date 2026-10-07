@@ -1,4 +1,4 @@
-# TwInsPEctor
+![TwInsPEctor](logo.PNG)
 
 TwInsPEctor is a tool for analyzing twin prime editing outcomes from next-generation sequencing reads, including data processing and visualization.
 
