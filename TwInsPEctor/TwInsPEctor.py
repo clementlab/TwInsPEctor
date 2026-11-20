@@ -1334,8 +1334,7 @@ def categorize_alleles(
             df_merged.at[idx, "Category_final"] = "Dual_Flap"
         if allele["Category_final"] == "WT_Indel":
             df_merged.at[idx, "Category_final"] = "Imperfect_WT"
-
-
+   
     return df_merged, bp_changes_arrs
 
 
@@ -2320,7 +2319,7 @@ def plot_ins_del_sub_by_category_barplot(counts_dict, category_counts, twinspect
     # ax.set_ylim(0, max_height * 1.15)
     # Conditionally set the y-limit so it scales correctly for both counts and percentages
     if plot_percentages:
-        # ax.set_ylim(0, 30)
+        # ax.set_ylim(0, 70)
         # ax.set_ylim(0, 25)
         # ax.set_ylim(0, max_height * 1.15)
         ax.set_ylim(0, max_height)
@@ -3402,9 +3401,9 @@ def plot_flap_removal(
 def plot_flap_distribution(counts_dict, fig_root=None, plot_formats=False):
     flap_types = [
         ("Dual Flap", "Dual_Flap"), 
-        ("Flap A\nOnly",   "Flap_A"),
+        ("Flap A",   "Flap_A"),
         ("Flap A\nHybrid", "Flap_A_Hybrid"),
-        ("Flap B\nOnly",   "Flap_B"),
+        ("Flap B",   "Flap_B"),
         ("Flap B\nHybrid", "Flap_B_Hybrid"),
     ]
 
@@ -5177,7 +5176,7 @@ def allele_table_summary_figures(
     args,
     ref_type,
     ref_aln_seq,
-    tpe_aln_seq,
+    tpe_aln_seq, 
     output_folder,
     plot_formats,
 ):
@@ -5271,6 +5270,28 @@ def allele_table_summary_figures(
 
     df_selected = df_categorized[columns[ref_type]].copy()
 
+    # # Adjust homologies
+    # motifs_to_fix = []
+    # if not args.no_alignment_adjustments:
+    #     cut_points_comp_a = reference_info["cut_points_composite_a"]
+    #     cut_points_comp_b = reference_info["cut_points_composite_b"]
+    #     if cat in ["Perfect_TPE", "WT"] and ref_type in ["comp_a", "comp_b"]:
+    #         comp_a_junction = reference_info["composite_a_ins_start"]
+    #         comp_b_junction = reference_info["composite_b_del_start"]
+    #         if reference_info["num_bases_shared_start_for_homology_adj"]:
+    #             motifs_to_fix.append(reference_info["inserted_seq"][:reference_info["num_bases_shared_start_for_homology_adj"]])
+    #         if reference_info["num_bases_shared_end_for_homology_adj"]:
+    #             motifs_to_fix.append(reference_info["inserted_seq"][-reference_info["num_bases_shared_end_for_homology_adj"]:])
+    #         if motifs_to_fix:
+    #             junction_index = comp_a_junction if ref_type == "comp_a" else comp_b_junction
+    #             df_adjusted = adjust_microhomology_alignment(
+    #                 df_selected, 
+    #                 motifs_to_fix,
+    #                 comp=ref_type, 
+    #                 cut_points=cut_points_comp_a if ref_type == "comp_a" else cut_points_comp_b,
+    #                 junction_index=junction_index
+    #             )
+
     (
         df_region,
         ref_seq_region,
@@ -5356,7 +5377,7 @@ def allele_table_summary_figures(
 def plot_summarized_allele_tables(
     args,
     df_categorized,
-    reference_info,
+    reference_info,  
     output_folder,
     plot_formats,
     n_processes=1,
@@ -5402,14 +5423,33 @@ def generate_report(twinspector_results_folder, parent_folder, html_filename="Tw
         raise ValueError(f"{twinspector_results_folder} is not a valid directory")
 
     captions = {
-        "Reads input": "Figure 1: Description for reads input goes ...",
-        "Outcomes": "Figure 2: Description for uncategorized outcomes goes ...",
-        "Outcomes stacked": "Figure 3: Description for stacked uncategorized outcomes...",
-        "Categorized": "Figure 4: Description for categorized outcomes...",
-        "Categorized stacked": "Figure 5: Description for stacked categorized outcomes...",
-        "Aligned to Composite A": "Description for alignments to Composite A...",
-        "3' Flap integration": "Description detailing the 3' flap integration...",
-        "By category": "Description of the data broken down by category...",
+        "Reads input": "a1.Reads_input: Number of reads in the FASTQ file(s) input to TwInsPEctor (Input). Number of reads remaining after preprocessing with CRISPResso2 (After Preprocessing). Number of reads meeting homology threshold and included in TwInsPEctor's analysis (Analyzed).",
+        "Outcomes": "a4.Outcomes_stacked: Number (percent) of analyzed reads that were unedited wild-type (dark red), partially edited (dark purple), and perfectly twin prime edited (dark blue).",
+        "Outcomes stacked": "a2.Outcomes: Number (percent) of analyzed reads that were unedited wild-type (dark red), partially edited (dark purple), and perfectly twin prime edited (dark blue).",
+        "Categorized": "a5.Outcomes_categorized: Number (percent) of analyzed reads in each allele outcome category.",
+        "Categorized stacked": "a3.Outcomes_categorized_stacked: Number (percent) of analyzed reads in each allele outcome category.",
+        "Aligned to Composite A": "Most frequent alleles in each outcome category. All allele outcomes, the wild-type (WT) reference sequence (top row), and the twin prime edited (twinPE) reference sequence (bottom row) are shown aligned to the Composite A reference sequence which consists of the two spacer regions at either end, with the WT deleted sequence upstream (5’) of the twinPE inserted sequence. The table shows up to the top 10 alleles with a frequency of at least 0.01 (default).",
+        "Aligned to Composite B": "Most frequent alleles in each outcome category. All allele outcomes, the wild-type (WT) reference sequence (top row), and the twin prime edited (twinPE) reference sequence (bottom row) are shown aligned to the Composite B reference sequence which consists of the two spacer regions at either end, with the WT deleted sequence downstream (3’) of the twinPE inserted sequence. The table shows up to the top 10 alleles with a frequency of at least 0.01 (default).",
+        "Aligned to twinPE": "Most frequent allele outcomes. Allele outcomes are shown aligned to the twin prime edited (twinPE) reference sequence (top row). The table shows up to the top 10 alleles with a frequency of at least 0.01 (default).",
+        "Aligned to WT": "Most frequent allele outcomes. Allele outcomes are shown aligned to the the wild-type (WT) reference sequence (top row). The table shows up to the top 10 alleles with a frequency of at least 0.01 (default).",
+        "3' Flap integration": "Percent of reads with contiguous 3’ flap resolution beginning from each pegRNA reverse transcription template (RTT). Contiguous flap integration from pegRNA-a (dark gray) and pegRNA-b (light gray), independently, are shown relative to the percentage of reads with perfect twin prime edits (dark blue) and reads containing the full RTT encoded sequence but having additional editing errors (medium blue). RTT base coverage and overlap are illustrated at the bottom if their sequences were input to TwInsPEctor.",
+        "Base integration by category": "Percent of reads containing each twinPE-programmed base by category. pegRNA-a and pegRNA-b reverse transcription template (RTT) base coverage and overlap are illustrated at the bottom if their sequences were input to TwInsPEctor.", 
+        "5' Flap removal": "Percent of reads with contiguous 5’ flap removal beginning from each WT flap. Contiguous base removal from WT flap A (dark gray) and WT flap B (light gray), independently, are shown relative to the percentage of reads with perfect twin prime edits (dark blue).", 
+        "3' Flap completion": "Fraction of reads with full or partial 3' flap resolution. Dark green (full) and light green (partial) show the fraction of Dual Flap reads with completed Flap A and Flap B vs reads with partial Flap A and/or Flap B, Flap A reads with complete vs partial Flap A, Flap A Hybrid reads with complete vs partial Flap A, Flap B reads with complete vs partial Flap B, Flap B Hybrid reads with complete vs partial Flap B. Total bar height is the total number of reads in a given category.", 
+        "Ind del sub by category": "Percentage (count) of reads with byproduct insertions (Ins), deletions (Del), and substitutions (Sub) stratified by category (left of dotted line) relative to the total counts from all categories (right of dotted line). WT and Imperfect WT alleles are aligned to the WT reference. Imperfect TPE, Flap B Hybrid, Flap A Hybrid, Flap B, Flap A, Dual Flap and Perfect TPE alleles are aligned to the twinPE reference. Partially edited reads aligned to the twinPE reference may contain residual WT sequence interpreted as insertions or missing twinPE sequence interpreted as deletions.", 
+        "Ins del sub combinations by category": "Percent of reads with byproduct insertion (Ins), deletion (Del), and substitution (Sub) combinations stratified by category (left of dotted line) relative to the total counts from all categories (right of dotted line). Category read counts are shown above each bar.", 
+        "All TPE": "Percent of TPE-like reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position. Includes Perfect TPE, Dual Flap, Flap A, Flap B, Flap A Hybrid, Flap B Hybrid, Null, and Imperfect TPE reads.", 
+        "All WT": "Percent of WT-like reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position. Includes Imperfect WT and WT reads.", 
+        "Perfect TPE": "Percent of Perfect TPE reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Dual Flap": "Percent of Dual Flap reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Flap A": "Percent of Flap A reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Flap B": "Percent of Flap B reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Flap A Hybrid": "Percent of Flap A Hybrid reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Flap B Hybrid": "Percent of Flap B Hybrid reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Imperfect TPE": "Percent of Imperfect TPE reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Null": "Percent of Null reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "Imperfect WT": "Percent of Imperfect WT reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
+        "WT": "Percent of WT reads with byproduct insertion (Ins), deletion (Del), or substitution (Sub) at each reference position.", 
     }
 
     # Helper for natural sorting
@@ -5446,7 +5486,7 @@ def generate_report(twinspector_results_folder, parent_folder, html_filename="Tw
             label_text = html.escape(get_label_fn(filepath.name))
             
             # Lookup the caption, or use a default placeholder
-            caption_text = captions.get(get_label_fn(filepath.name), "[ Add figure description for this plot here ]")
+            caption_text = captions.get(get_label_fn(filepath.name), "Add figure description for plot")
             
             # Since the HTML is inside base_dir, paths are simply relative to base_dir.
             rel_path = filepath.relative_to(base_dir)
@@ -5502,8 +5542,7 @@ def generate_report(twinspector_results_folder, parent_folder, html_filename="Tw
             "outcomes": "Outcomes",
             "outcomes stacked": "Outcomes stacked",
             "outcomes categorized": "Categorized",
-            "outcome categorized stacked": "Categorized stacked",
-            "outcomes categorized stacked": "Categorized stacked" # Catch alternative spelling
+            "outcomes categorized stacked": "Categorized stacked"
         }
         return mapping.get(norm, norm.capitalize())
         
@@ -5534,8 +5573,8 @@ def generate_report(twinspector_results_folder, parent_folder, html_filename="Tw
         mapping = {
             "3' flap integration": "3' Flap integration",
             "3 flap integration": "3' Flap integration",
-            "3' base integration by category": "By category",
-            "3 base integration by category": "By category",
+            "3' base integration by category": "Base integration by category",
+            "3 base integration by category": "Base integration by category",
             "3' flap completion": "3' Flap completion",
             "3 flap completion": "3' Flap completion",
             "5' flap removal": "5' Flap removal",

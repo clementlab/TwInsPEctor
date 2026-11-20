@@ -34,7 +34,14 @@ conda install bioconda::twinspector
 
 ### From Source
 
+TwInsPEctor requires [CRISPResso2](https://github.com/pinellolab/CRISPResso2), which is distributed via Bioconda rather than PyPI. When installing from source, install `crispresso2` in your Conda environment first (see the [CRISPResso2 installation guide](https://github.com/pinellolab/CRISPResso2#installation) for additional details), then install TwInsPEctor into that environment with `pip`:
+
 ```bash
+# Create and activate a Conda environment with CRISPResso2
+conda create -n twinspector_env -c bioconda -c conda-forge crispresso2
+conda activate twinspector_env
+
+# Clone and install TwInsPEctor into the environment
 git clone https://github.com/clementlab/TwInsPEctor.git
 cd TwInsPEctor
 pip install .
