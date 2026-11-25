@@ -293,8 +293,41 @@ def analyze_references(wt_seq, tpe_seq, spacer_a, spacer_b, rt_template_a, rt_te
     # Extract sequence components
     prefix_seq = wt_seq[:spacer_a_nick_site_wt + 1]
     suffix_seq = wt_seq[spacer_b_nick_site_wt + 1:]
+    tpe_prefix_seq = tpe_seq[:spacer_a_nick_site_tpe + 1]
+    tpe_suffix_seq = tpe_seq[spacer_b_nick_site_tpe + 1:]
     wt_deleted_seq = wt_seq[spacer_a_nick_site_wt + 1:spacer_b_nick_site_wt + 1]
     tpe_inserted_seq = tpe_seq[spacer_a_nick_site_tpe + 1:spacer_b_nick_site_tpe + 1]
+
+    # Validate that WT and TPE share identical 5' and 3' flanking sequences outside the nick sites
+    flank_errors = []
+    for label, wt_flank, tpe_flank in [
+        ("5' prefix (upstream of spacer A nick site)", prefix_seq, tpe_prefix_seq),
+        ("3' suffix (downstream of spacer B nick site)", suffix_seq, tpe_suffix_seq),
+    ]:
+        if wt_flank != tpe_flank:
+            first_diff = next(
+                (i for i, (a, b) in enumerate(zip(wt_flank, tpe_flank)) if a != b),
+                min(len(wt_flank), len(tpe_flank)),
+            )
+            ctx_start = max(0, first_diff - 15)
+            ctx_end = first_diff + 25
+            flank_errors.append(
+                f"  - {label} mismatch (WT: {len(wt_flank)} bp, TPE: {len(tpe_flank)} bp; "
+                f"first difference at offset {first_diff}):\n"
+                f"      WT : ...{wt_flank[ctx_start:ctx_end]}...\n"
+                f"      TPE: ...{tpe_flank[ctx_start:ctx_end]}..."
+            )
+    if flank_errors:
+        raise ValueError(
+            "WT (-w) and TPE (-t) sequences must have identical 5' and 3' flanking sequences outside the pegRNA nick sites:\n"
+            + "\n".join(flank_errors)
+        )
+
+    if recoding_mode and len(wt_seq) != len(tpe_seq):
+        raise ValueError(
+            f"Recoding mode (--recoding_mode) requires WT (-w) and TPE (-t) sequences to have the same length "
+            f"(got WT: {len(wt_seq)} bp, TPE: {len(tpe_seq)} bp)."
+        )
 
     # Build composite reference sequences
     composite_a_ref_seq = prefix_seq + wt_deleted_seq + tpe_inserted_seq + suffix_seq
@@ -923,6 +956,48 @@ def resolve_composite_categories(
     return category_a, "Composite_A"
 
 
+def _has_start_match(arr, num_shared_start, min_num_base_edits, valid_values):
+    start = num_shared_start
+    end = num_shared_start + min_num_base_edits
+    if min_num_base_edits <= 0 or end > len(arr):
+        return False
+    return all(base in valid_values for base in arr[start:end])
+
+
+def _has_end_match(arr, num_shared_end, min_num_base_edits, valid_values):
+    end = len(arr) - num_shared_end
+    start = end - min_num_base_edits
+    if min_num_base_edits <= 0 or start < 0 or end <= 0:
+        return False
+    return all(base in valid_values for base in arr[start:end])
+
+
+def _has_wt_flap_b(del_arr, ins_arr, num_shared_end, min_num_base_edits):
+    wt_codes = {"W", "WI", "=W", "=WI"}
+    if len(del_arr) - num_shared_end >= min_num_base_edits:
+        return _has_end_match(del_arr, num_shared_end, min_num_base_edits, wt_codes)
+    # When the entire WT edit region is shared with the 3' end of TPE (e.g., pure insertion at nick A),
+    # a Flap A Hybrid retains those 3' WT bases in either the deletion region or the shared tail of the insertion region.
+    if _has_end_match(del_arr, 0, min_num_base_edits, wt_codes):
+        return True
+    if ins_arr is not None and num_shared_end >= min_num_base_edits:
+        return _has_end_match(ins_arr, 0, min_num_base_edits, {"=T", "=TI"})
+    return False
+
+
+def _has_wt_flap_a(del_arr, ins_arr, num_shared_start, min_num_base_edits):
+    wt_codes = {"W", "WI", "=W", "=WI"}
+    if len(del_arr) - num_shared_start >= min_num_base_edits:
+        return _has_start_match(del_arr, num_shared_start, min_num_base_edits, wt_codes)
+    # When the entire WT edit region is shared with the 5' end of TPE (e.g., pure insertion at nick B),
+    # a Flap B Hybrid retains those 5' WT bases in either the deletion region or the shared head of the insertion region.
+    if _has_start_match(del_arr, 0, min_num_base_edits, wt_codes):
+        return True
+    if ins_arr is not None and num_shared_start >= min_num_base_edits:
+        return _has_start_match(ins_arr, 0, min_num_base_edits, {"=T", "=TI"})
+    return False
+
+
 def categorize_alleles(
         df_merged=None, 
         wt_seq=None, 
@@ -961,12 +1036,15 @@ def categorize_alleles(
     df_merged['Category_comp_a'] = ""
     df_merged['TPE_Indel'] = False
     df_merged['Category_comp_b'] = ""
-    df_merged['tpe_ins_match_arr'] = ""
-    df_merged['comp_a_ins_match_arr'] = ""
-    df_merged['comp_b_ins_match_arr'] = ""
-    df_merged['wt_del_match_arr'] = ""
-    df_merged['comp_a_del_match_arr'] = ""
-    df_merged['comp_b_del_match_arr'] = ""
+    for col in [
+        'tpe_ins_match_arr',
+        'comp_a_ins_match_arr',
+        'comp_b_ins_match_arr',
+        'wt_del_match_arr',
+        'comp_a_del_match_arr',
+        'comp_b_del_match_arr',
+    ]:
+        df_merged[col] = pd.Series([None] * len(df_merged), index=df_merged.index, dtype=object)
     df_merged['wt_all_ins_pos'] = "[]"
     df_merged['wt_all_del_pos'] = "[]"
     df_merged['wt_all_sub_pos'] = "[]"
@@ -1085,8 +1163,8 @@ def categorize_alleles(
         comp_a_has_all_WT = (comp_a_total_WT_count + comp_a_total_shared_base_WT_count == len(comp_a_match_arr))
         comp_a_has_any_WT = (comp_a_total_WT_count > 0)
 
-        comp_a_has_flap_a = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-        comp_a_has_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+        comp_a_has_flap_a = _has_start_match(comp_a_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+        comp_a_has_flap_b = _has_end_match(comp_a_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
         if comp_a_has_all_TPE and comp_a_has_indel:
             df_merged.at[idx,'Category_comp_a'] = "TPE_Indel"
@@ -1136,8 +1214,8 @@ def categorize_alleles(
         comp_b_has_all_WT = (comp_b_total_WT_count + comp_b_total_shared_base_WT_count == len(comp_b_match_arr))
         comp_b_has_any_WT = (comp_b_total_WT_count > 0)
 
-        comp_b_has_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-        comp_b_has_flap_b = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+        comp_b_has_flap_a = _has_start_match(comp_b_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+        comp_b_has_flap_b = _has_end_match(comp_b_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
         if comp_b_has_all_TPE and comp_b_has_indel:
             df_merged.at[idx,'Category_comp_b'] = "TPE_Indel"
@@ -1206,27 +1284,27 @@ def categorize_alleles(
             if allele.Classified_by == "TPE":
                 tpe_ins_match_arr = allele.tpe_ins_match_arr
 
-                has_tpe_flap_a = all(base in {"T", "TI"} for base in tpe_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-                has_tpe_flap_b = all(base in {"T", "TI"} for base in tpe_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_tpe_flap_a = _has_start_match(tpe_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+                has_tpe_flap_b = _has_end_match(tpe_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
             elif allele.Classified_by == "Composite_A":
                 comp_a_ins_match_arr = allele.comp_a_ins_match_arr
 
-                has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-                has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_tpe_flap_a = _has_start_match(comp_a_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+                has_tpe_flap_b = _has_end_match(comp_a_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
             elif allele.Classified_by == "Composite_B":
                 comp_b_ins_match_arr = allele.comp_b_ins_match_arr
 
-                has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-                has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_tpe_flap_a = _has_start_match(comp_b_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+                has_tpe_flap_b = _has_end_match(comp_b_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
             elif allele.Classified_by == "Composite_A&B":
                 comp_a_ins_match_arr = allele.comp_a_ins_match_arr
                 comp_b_ins_match_arr = allele.comp_b_ins_match_arr
 
-                has_tpe_flap_a = all(base in {"T", "TI"} for base in comp_b_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
-                has_tpe_flap_b = all(base in {"T", "TI"} for base in comp_a_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_tpe_flap_a = _has_start_match(comp_b_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"T", "TI"})
+                has_tpe_flap_b = _has_end_match(comp_a_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"T", "TI"})
 
             if has_tpe_flap_a is True and has_tpe_flap_b is True:
                 df_merged.at[idx, "dual_flap"] = True
@@ -1242,15 +1320,23 @@ def categorize_alleles(
 
             if allele.Classified_by == "TPE":
                 tpe_ins_match_arr = allele.tpe_ins_match_arr
-                has_wt_flap_b = all(base in {"W", "WI"} for base in tpe_ins_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_wt_flap_b = _has_end_match(tpe_ins_match_arr, reference_info["num_bases_shared_end"], min_num_base_edits, {"W", "WI"})
 
             elif allele.Classified_by == "Composite_A":
-                comp_a_del_match_arr = allele.comp_a_del_match_arr
-                has_wt_flap_b = all(base in {"W", "WI"} for base in comp_a_del_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_wt_flap_b = _has_wt_flap_b(
+                    allele.comp_a_del_match_arr,
+                    allele.comp_a_ins_match_arr,
+                    reference_info["num_bases_shared_end"],
+                    min_num_base_edits,
+                )
 
             elif allele.Classified_by == "Composite_B":
-                comp_b_del_match_arr = allele.comp_b_del_match_arr
-                has_wt_flap_b = all(base in {"W", "WI"} for base in comp_b_del_match_arr[-(reference_info["num_bases_shared_end"] + min_num_base_edits):None if reference_info["num_bases_shared_end"] == 0 else -reference_info["num_bases_shared_end"]])
+                has_wt_flap_b = _has_wt_flap_b(
+                    allele.comp_b_del_match_arr,
+                    allele.comp_b_ins_match_arr,
+                    reference_info["num_bases_shared_end"],
+                    min_num_base_edits,
+                )
 
             if has_wt_flap_b is True:
                 df_merged.at[idx, "flap_a_hybrid"] = True
@@ -1266,15 +1352,23 @@ def categorize_alleles(
 
             if allele.Classified_by == "TPE":
                 tpe_ins_match_arr = allele.tpe_ins_match_arr
-                has_wt_flap_a = all(base in {"W", "WI"} for base in tpe_ins_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
+                has_wt_flap_a = _has_start_match(tpe_ins_match_arr, reference_info["num_bases_shared_start"], min_num_base_edits, {"W", "WI"})
 
             elif allele.Classified_by == "Composite_A":
-                comp_a_del_match_arr = allele.comp_a_del_match_arr
-                has_wt_flap_a = all(base in {"W", "WI"} for base in comp_a_del_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
+                has_wt_flap_a = _has_wt_flap_a(
+                    allele.comp_a_del_match_arr,
+                    allele.comp_a_ins_match_arr,
+                    reference_info["num_bases_shared_start"],
+                    min_num_base_edits,
+                )
 
             elif allele.Classified_by == "Composite_B":
-                comp_b_del_match_arr = allele.comp_b_del_match_arr
-                has_wt_flap_a = all(base in {"W", "WI"} for base in comp_b_del_match_arr[reference_info["num_bases_shared_start"]:reference_info["num_bases_shared_start"] + min_num_base_edits])
+                has_wt_flap_a = _has_wt_flap_a(
+                    allele.comp_b_del_match_arr,
+                    allele.comp_b_ins_match_arr,
+                    reference_info["num_bases_shared_start"],
+                    min_num_base_edits,
+                )
 
             if has_wt_flap_a is True:
                 df_merged.at[idx, "flap_b_hybrid"] = True
@@ -1283,16 +1377,17 @@ def categorize_alleles(
 
     # Split out alleles lacking any sequence (WT or TPE) between nick sites from Imperfect WTs
     df_merged["null"] = None
+    non_null_codes = {"W", "WI", "=W", "=WI", "T", "TI", "=T", "=TI"}
     for idx, allele in df_merged.iterrows():
 
         has_null = None
         if allele.Classified_by == "WT":
             wt_del_match_arr = allele.wt_del_match_arr
-            has_null = all(base not in {"W", "WI", "T", "TI"} for base in wt_del_match_arr)
+            has_null = bool(wt_del_match_arr) and all(base not in non_null_codes for base in wt_del_match_arr)
 
-        if allele.Classified_by == "TPE":
-            wt_del_match_arr = allele.wt_del_match_arr
-            has_null = all(base not in {"W", "WI", "T", "TI"} for base in tpe_ins_match_arr)
+        elif allele.Classified_by == "TPE":
+            tpe_ins_match_arr = allele.tpe_ins_match_arr
+            has_null = bool(tpe_ins_match_arr) and all(base not in non_null_codes for base in tpe_ins_match_arr)
 
         elif allele.Classified_by == "Composite_A":
             comp_a_del_match_arr = allele.comp_a_del_match_arr
@@ -4673,19 +4768,20 @@ def plot_alleles_heatmap(
     N_ROWS=len(X)
     N_COLUMNS=plot_nuc_len
 
-    # if N_ROWS < 1:
-    #     fig, ax = plt.subplots()
-    #     fig.text(0.5, 0.5, 'No Alleles', horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
-    #     ax.set_clip_on(False)
-
-    #     # if fig_filename_root is None:
-    #     #     plt.show()
-    #     # else:
-    #     fig.savefig(fig_filename_root+'.png', bbox_inches='tight', dpi=300)
-    #     if SAVE_ALSO_PDF:
-    #         fig.savefig(fig_filename_root+'.pdf', bbox_inches='tight')
-    #     plt.close(fig)
-    #     return
+    if N_ROWS < 1:
+        fig, ax = plt.subplots()
+        fig.text(
+            0.5,
+            0.5,
+            'No Alleles',
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform=ax.transAxes,
+        )
+        ax.set_axis_off()
+        ax.set_clip_on(False)
+        save_plot(fig_filename, plot_formats, fig=fig, fig_root=fig_root, bbox_inches='tight')
+        return
 
     sgRNA_rows = []
     num_sgRNA_rows = 0
